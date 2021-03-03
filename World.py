@@ -36,6 +36,7 @@ class World(object):
         self.scrub_prices = {}
         self.maximum_wallets = 0
         self.light_arrow_location = None
+        self.song_of_time_location = None
         self.triforce_count = 0
         self.bingosync_url = None
 

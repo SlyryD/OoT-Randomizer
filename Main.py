@@ -553,6 +553,19 @@ def find_light_arrows(spoiler):
         maybe_set_light_arrows(location)
 
 
+def maybe_set_song_of_time(location):
+    if not location.item.world.song_of_time_location and location.item and location.item.name == 'Song of Time':
+        location.item.world.song_of_time_location = location
+        logging.getLogger('').debug(f'Song of Time [{location.item.world.id}] set to [{location.name}]')
+
+
+def find_song_of_time(spoiler):
+    search = Search([world.state for world in spoiler.worlds])
+    for location in search.iter_reachable_locations(search.progression_locations()):
+        search.collect(location.item)
+        maybe_set_song_of_time(location)
+
+
 def update_required_items(spoiler):
     worlds = spoiler.worlds
 
@@ -573,8 +586,10 @@ def update_required_items(spoiler):
         item_locations &= spoiler_locations
         # Skip even the checks
         _maybe_set_light_arrows = lambda _: None
+        _maybe_set_song_of_time = lambda _: None
     else:
         _maybe_set_light_arrows = maybe_set_light_arrows
+        _maybe_set_song_of_time = maybe_set_song_of_time
 
     required_locations = []
 
@@ -591,6 +606,7 @@ def update_required_items(spoiler):
                 required_locations.append(location)
             location.item = old_item
             _maybe_set_light_arrows(location)
+            _maybe_set_song_of_time(location)
         search.state_list[location.item.world.id].collect(location.item)
 
     # Filter the required location to only include location in the world
@@ -641,6 +657,7 @@ def create_playthrough(spoiler):
             # Collect the item for the state world it is for
             search.state_list[location.item.world.id].collect(location.item)
             maybe_set_light_arrows(location)
+            maybe_set_song_of_time(location)
     logger.info('Collected %d spheres', len(collection_spheres))
 
     # Reduce each sphere in reverse order, by checking if the game is beatable
@@ -723,11 +740,14 @@ def create_playthrough(spoiler):
 
     # Then we can finally output our playthrough
     spoiler.playthrough = OrderedDict((str(i + 1), {location: location.item for location in sphere}) for i, sphere in enumerate(collection_spheres))
-    # Copy our light arrows, since we set them in the world copy
+    # Copy our light arrows and song of time, since we set them in the world copy
     for w, sw in zip(worlds, spoiler.worlds):
         if w.light_arrow_location:
             # But the actual location saved here may be in a different world
             sw.light_arrow_location = spoiler.worlds[w.light_arrow_location.world.id].get_location(w.light_arrow_location.name)
+        if w.song_of_time_location:
+            # But the actual location saved here may be in a different world
+            sw.song_of_time_location = spoiler.worlds[w.song_of_time_location.world.id].get_location(w.song_of_time_location.name)
 
     if worlds[0].entrance_shuffle:
         spoiler.entrance_playthrough = OrderedDict((str(i + 1), list(sphere)) for i, sphere in enumerate(entrance_spheres))

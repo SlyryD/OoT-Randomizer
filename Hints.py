@@ -923,7 +923,10 @@ def buildAltarHints(world, messages, include_rewards=True, include_wincons=True)
         child_text += getHint('Spiritual Stone Text Start', world.clearer_hints).text + '\x04'
         for (reward, color) in bossRewardsSpiritualStones:
             child_text += buildBossString(reward, color, world)
-    child_text += getHint('Child Altar Text End', world.clearer_hints).text
+    if include_wincons:
+        child_text += buildSongOfTimeString(world)
+    else:
+        child_text += getHint('Child Altar Text End', world.clearer_hints).text
     child_text += '\x0B'
     update_message_by_id(messages, 0x707A, get_raw_text(child_text), 0x20)
 
@@ -1040,6 +1043,23 @@ def buildGanonText(world, messages):
     text += '!'
 
     update_message_by_id(messages, 0x70CC, text)
+
+
+def buildSongOfTimeString(world):
+    string = "\x13\x08" # Ocarina of Time Icon
+    if world.distribution.get_starting_item('Song of Time') > 0:
+        song_of_time_location_string = "\x05\x42your pocket\x05\x40"
+    elif world.song_of_time_location:
+        location = world.song_of_time_location
+        location_hint = get_hint_area(location)
+        if world.id != location.world.id:
+            song_of_time_location_string = "\x05\x42Player %d's\x05\x40 %s" % (location.world.id +1, get_raw_text(location_hint))
+        else:
+            song_of_time_location_string = get_raw_text(location_hint)
+    else:
+        song_of_time_location_string = "\x05\x42your dreams\x05\x40"
+    string += "And the song that opens the \x05\x44Door of Time\x05\x40 can be found in %s." % song_of_time_location_string
+    return str(GossipText(string, ['Yellow'], prefix=''))
 
 
 def get_raw_text(string):
