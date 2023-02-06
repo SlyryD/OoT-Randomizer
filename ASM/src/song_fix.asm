@@ -94,3 +94,12 @@ Check_Has_Epona_Song:
 @@return:
     jr      ra
     nop
+
+unrelated_silver_rupee_fix:
+    li      t0, 5
+    div     v1, t0
+    mfhi    v1
+    ; hack: start of function we want to return to happens to be stored in t9
+    addiu   t9, t9, 0x0034
+    jr      t9
+    nop

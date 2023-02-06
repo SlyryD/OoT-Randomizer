@@ -3185,3 +3185,11 @@ skip_GS_BGS_text:
 ; Replaces: addiu   t9, $zero, 0x3033
 .orga 0xED31B8
     addiu   t9, $zero, 0x3036
+
+;===================================================================================================
+; Fix index into silver rupee notes array
+;===================================================================================================
+; Replaces:
+;   beqz    at, 0xDF358C
+.orga 0xDF3550
+    j       unrelated_silver_rupee_fix
