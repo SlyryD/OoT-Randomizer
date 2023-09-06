@@ -2,6 +2,7 @@
 
 #include "z64.h"
 #include "item_draw_table.h"
+#include "models.h"
 #include "sys_matrix.h"
 
 typedef Gfx *(*append_setup_dl_fn)(Gfx *gfx, uint32_t dl_index);
@@ -607,4 +608,27 @@ void draw_gi_c_button_horizontal(z64_game_t *game, uint32_t draw_id) {
     gSPMatrix(gfx->poly_opa.p++, append_sys_matrix(gfx), G_MTX_MODELVIEW | G_MTX_LOAD | G_MTX_NOPUSH);
     gDPSetPrimColor(gfx->poly_opa.p++, 0, 0x80, prim_color.r, prim_color.g, prim_color.b, prim_color.a);
     gSPDisplayList(gfx->poly_opa.p++, item_draw_table[draw_id].args[0].dlist);
+}
+
+void draw_gi_magic_meter(z64_game_t *game, uint32_t draw_id) {
+    z64_gfx_t *gfx = game->common.gfx;
+
+    // Magic spell container loaded from object_gi_goddess file
+    loaded_object_t *object = get_object((uint32_t)0x015D);
+    if (object) {
+        // Hack to reference vertices in segment 09 instead of segment 06
+        object->buf[0x09A4] = 0x09;
+        object->buf[0x09B4] = 0x09;
+        // Put the object_gi_goddess file into segment 09
+        gSPSegment(gfx->poly_xlu.p++, 0x09, object->buf);
+    }
+
+    // Draw magic jar
+    draw_gi_various_opa0(game, draw_id);
+
+    // Scale up and draw magic spell container
+    scale_sys_matrix(1.5f, 1.5f, 1.5f, 1);
+    append_setup_dl_25_to_xlu(gfx);
+    gSPMatrix(gfx->poly_xlu.p++, append_sys_matrix(gfx), G_MTX_MODELVIEW | G_MTX_LOAD | G_MTX_NOPUSH);
+    gSPDisplayList(gfx->poly_xlu.p++, item_draw_table[draw_id].args[1].dlist);
 }

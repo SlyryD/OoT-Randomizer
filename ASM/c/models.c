@@ -16,11 +16,6 @@ typedef struct {
     uint8_t graphic_id;
 } model_t;
 
-typedef struct {
-    uint16_t object_id;
-    uint8_t *buf;
-} loaded_object_t;
-
 extern uint32_t SHUFFLE_CHEST_GAME;
 extern uint32_t EXTENDED_OBJECT_TABLE;
 extern EnItem00 *collectible_mutex;
