@@ -2,7 +2,6 @@
 
 #include "z64.h"
 #include "item_draw_table.h"
-#include "models.h"
 #include "sys_matrix.h"
 
 typedef Gfx *(*append_setup_dl_fn)(Gfx *gfx, uint32_t dl_index);
@@ -613,41 +612,9 @@ void draw_gi_c_button_horizontal(z64_game_t *game, uint32_t draw_id) {
 void draw_gi_magic_meter(z64_game_t *game, uint32_t draw_id) {
     z64_gfx_t *gfx = game->common.gfx;
 
+    // Turn the model sideways
+    rotate_Z_sys_matrix(3.14f, 1);
+
     // Draw magic jar
     draw_gi_various_opa0(game, draw_id);
-
-    // Draw a larger transparent container for the magic jar
-    loaded_object_t *object = get_object((uint32_t)0x00CD);
-    if (object) {
-        Gfx *cur_gfx_ptr;
-
-        // Modify small magic jar dlist
-        cur_gfx_ptr = (Gfx *)&object->buf[0x0588];
-        gDPSetRenderMode(cur_gfx_ptr++, G_RM_PASS, G_RM_AA_ZB_XLU_SURF2);
-        gDPSetCombineMode(cur_gfx_ptr++, G_CC_BLENDPEDECALA, G_CC_PASS2);
-        cur_gfx_ptr = (Gfx *)&object->buf[0x05B8];
-        gDPLoadTextureBlock(cur_gfx_ptr++, 0x04032930, G_IM_FMT_I, G_IM_SIZ_8b, 32, 32, 0, G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMIRROR
-                            | G_TX_WRAP, 5, 5, 1, 1);
-        gSPClearGeometryMode(cur_gfx_ptr++, G_CULL_BACK | G_FOG);
-        gSPSetGeometryMode(cur_gfx_ptr++, G_LIGHTING | G_TEXTURE_GEN | G_TEXTURE_GEN_LINEAR);
-
-        // Modify large magic jar dlist
-        cur_gfx_ptr = (Gfx *)&object->buf[0x0EE8];
-        gDPSetRenderMode(cur_gfx_ptr++, G_RM_PASS, G_RM_AA_ZB_XLU_SURF2);
-        gDPSetCombineMode(cur_gfx_ptr++, G_CC_BLENDPEDECALA, G_CC_PASS2);
-        cur_gfx_ptr = (Gfx *)&object->buf[0x0F18];
-        gDPLoadTextureBlock(cur_gfx_ptr++, 0x04032930, G_IM_FMT_I, G_IM_SIZ_8b, 32, 32, 0, G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMIRROR
-                            | G_TX_WRAP, 5, 5, 1, 1);
-        gSPClearGeometryMode(cur_gfx_ptr++, G_CULL_BACK | G_FOG);
-        gSPSetGeometryMode(cur_gfx_ptr++, G_LIGHTING | G_TEXTURE_GEN | G_TEXTURE_GEN_LINEAR);
-
-        // Assign segment 09 to magic jar object buffer
-        gSPSegment(gfx->poly_xlu.p++, 0x09, object->buf);
-
-        // Scale up and draw magic jar container
-        scale_sys_matrix(1.25f, 1.015625f, 1.25f, 1);
-        append_setup_dl_25_to_xlu(gfx);
-        gSPMatrix(gfx->poly_xlu.p++, append_sys_matrix(gfx), G_MTX_MODELVIEW | G_MTX_LOAD | G_MTX_NOPUSH);
-        gSPDisplayList(gfx->poly_xlu.p++, item_draw_table[draw_id].args[1].dlist);
-    }
 }
