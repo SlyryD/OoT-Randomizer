@@ -608,13 +608,3 @@ void draw_gi_c_button_horizontal(z64_game_t *game, uint32_t draw_id) {
     gDPSetPrimColor(gfx->poly_opa.p++, 0, 0x80, prim_color.r, prim_color.g, prim_color.b, prim_color.a);
     gSPDisplayList(gfx->poly_opa.p++, item_draw_table[draw_id].args[0].dlist);
 }
-
-void draw_gi_magic_meter(z64_game_t *game, uint32_t draw_id) {
-    z64_gfx_t *gfx = game->common.gfx;
-
-    // Turn the model sideways
-    rotate_Z_sys_matrix(3.14f, 1);
-
-    // Draw magic jar
-    draw_gi_various_opa0(game, draw_id);
-}
