@@ -1,9 +1,8 @@
 from Rom import *
 
-def get_actor_list(rom, actor_func):
+# scene_table = 0x00BA0BB0 # for MQ
+def get_actor_list(rom, actor_func, scene_table = 0x00B71440):
     actors = {}
-    scene_table = 0x00B71440
-    # scene_table = 0x00BA0BB0 # for MQ
     for scene in range(0x00, 0x65):
         scene_data = rom.read_int32(scene_table + (scene * 0x14))
         actors.update(scene_get_actors(rom, actor_func, scene_data, scene))
