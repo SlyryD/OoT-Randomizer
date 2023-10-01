@@ -1574,6 +1574,10 @@ def patch_rom(spoiler: Spoiler, world: World, rom: Rom) -> Rom:
         # change the exit at child/day crawlspace to the end of zelda's goddess cutscene
         rom.write_bytes(0x21F60DE, [0x05, 0xF0])
 
+    # Patch gold skulltulas
+    if world.settings.fully_mix_skulltulas:
+        fully_mix_skulltulas(rom)
+
     # patch mq scenes
     mq_scenes = []
     if world.dungeon_mq['Deku Tree']:

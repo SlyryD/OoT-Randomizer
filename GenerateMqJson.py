@@ -55,124 +55,165 @@ class SceneWord:
 
 @dataclass
 class File_MQJson:
-    Name: str = field(metadata={"order": 1})
-    Start: str = field(metadata={"order": 2})
-    End: str = field(metadata={"order": 3})
-    RemapStart: Optional[str] = field(metadata={"order": 4}, default=None)
+    Name: str
+    Start: str
+    End: str
+    RemapStart: Optional[str] = None
 
 
 @dataclass
 class Path_MQJson:
-    Points: list[list[int]] = field(metadata={"order": 1})
+    Points: list[list[int]] = field(default_factory=list)
 
 
-@dataclass
 class Room_MQJson:
-    File: File_MQJson = field(metadata={"order": 1})
-    Id: int = field(metadata={"order": 2})
-    Objects: list[str] = field(metadata={"order": 3})
-    Actors: list[str] = field(metadata={"order": 4})
+    File: File_MQJson
+    Id: int
+    Objects: list[str]
+    Actors: list[str]
+
+    def __init__(self, rom: Rom, scene_id: int, room_id: int, start: int, end: int) -> None:
+        self.File = File_MQJson(
+            Name=f'Scene {scene_id}, Room {room_id}',
+            Start=f'{start:08X}',
+            End=f'{end:08X}',
+        )
+        self.Id = room_id
+        self.Objects = []
+        self.Actors = []
+
+        cursor: int = start
+        command: Optional[SceneWord] = None
+        while command is None or command.code != HeaderCommand.End:
+            command = SceneWord(
+                code=rom.read_byte(cursor),
+                data1=rom.read_byte(cursor + 1),
+                data2=rom.read_int32(cursor + 4),
+            )
+            cursor += 8
+
+            if command.code == HeaderCommand.ObjectList:
+                offset = command.data2 & 0x00FFFFFF
+                self.init_objects(rom, start, offset, command.data1)
+            elif command.code == HeaderCommand.ActorList:
+                offset = command.data2 & 0x00FFFFFF
+                self.init_actors(rom, start, offset, command.data1)
+
+    def init_objects(self, rom: Rom, start: int, offset: int, num_objects: int) -> None:
+        cursor: int = start + offset
+        for _ in range(num_objects):
+            object_id: int = rom.read_int16(cursor)
+            self.Objects.append(f'{object_id:04X}')
+            cursor += 2
+
+    def init_actors(self, rom: Rom, start: int, offset: int, num_actors: int) -> None:
+        cursor: int = start + offset
+        for _ in range(num_actors):
+            actor_data: list[int] = []
+            for _ in range(8):
+                actor_data.append(rom.read_int16(cursor))
+                cursor += 2
+            self.Actors.append(' '.join([f'{x:04X}' for x in actor_data]))
 
 
 @dataclass
 class ColVertex_MQJson:
-    Id: int = field(metadata={"order": 1})
-    X: int = field(metadata={"order": 2})
-    Y: int = field(metadata={"order": 3})
-    Z: int = field(metadata={"order": 4})
+    Id: int
+    X: int
+    Y: int
+    Z: int
 
 
 @dataclass
 class ColPoly_MQJson:
-    Id: int = field(metadata={"order": 1})
-    Type: int = field(metadata={"order": 2})
-    Flags: int = field(metadata={"order": 3})
+    Id: int
+    Type: int
+    Flags: int
 
 
 @dataclass
 class ColMat_MQJson:
-    Id: int = field(metadata={"order": 1})
-    High: int = field(metadata={"order": 2})
-    Low: int = field(metadata={"order": 3})
+    Id: int
+    High: int
+    Low: int
 
 
 @dataclass
 class ColCam_MQJson:
-    Data: int = field(metadata={"order": 1})
-    PositionIndex: int = field(metadata={"order": 2})
+    Data: int
+    PositionIndex: int
 
 
 @dataclass
 class ColWaterBox_MQJson:
-    Id: int = field(metadata={"order": 1})
-    Data: list[int] = field(metadata={"order": 2})
+    Id: int
+    Data: list[int] = field(default_factory=list)
 
 
 @dataclass
 class Col_MQJson:
-    IsLarger: bool = field(metadata={"order": 1})
-    MinVertex: ColVertex_MQJson = field(metadata={"order": 2})
-    MaxVertex: ColVertex_MQJson = field(metadata={"order": 3})
-    NumVertices: int = field(metadata={"order": 4})
-    Vertices: list[ColVertex_MQJson] = field(metadata={"order": 5})
-    NumPolys: int = field(metadata={"order": 6})
-    Polys: list[ColPoly_MQJson] = field(metadata={"order": 7})
-    NumPolyTypes: int = field(metadata={"order": 8})
-    PolyTypes: list[ColMat_MQJson] = field(metadata={"order": 9})
-    NumCams: int = field(metadata={"order": 10})
-    Cams: list[ColCam_MQJson] = field(metadata={"order": 11})
-    NumWaterBoxes: int = field(metadata={"order": 12})
-    WaterBoxes: list[ColWaterBox_MQJson] = field(metadata={"order": 13})
+    IsLarger: bool
+    MinVertex: ColVertex_MQJson
+    MaxVertex: ColVertex_MQJson
+    NumVertices: int = 0
+    Vertices: list[ColVertex_MQJson] = field(default_factory=list)
+    NumPolys: int = 0
+    Polys: list[ColPoly_MQJson] = field(default_factory=list)
+    NumPolyTypes: int = 0
+    PolyTypes: list[ColMat_MQJson] = field(default_factory=list)
+    NumCams: int = 0
+    Cams: list[ColCam_MQJson] = field(default_factory=list)
+    NumWaterBoxes: int = 0
+    WaterBoxes: list[ColWaterBox_MQJson] = field(default_factory=list)
 
 
 @dataclass
 class IconPoint:
-    Flag: int = field(metadata={"order": 1})
-    x: float = field(metadata={"order": 2})
-    y: float = field(metadata={"order": 3})
+    Flag: int
+    x: float
+    y: float
 
 
 @dataclass
 class DungeonFloorIcon:
-    Icon: int = field(metadata={"order": 1})
-    Count: int = field(metadata={"order": 2})
-    IconPoints: list[IconPoint] = field(metadata={"order": 3})
+    Icon: int
+    Count: int
+    IconPoints: list[IconPoint] = field(default_factory=list)
 
 
 @dataclass
 class DungeonFloor:
-    Icons: list[DungeonFloorIcon] = field(metadata={"order": 1})
+    Icons: list[DungeonFloorIcon] = field(default_factory=list)
 
 
 @dataclass
 class IconPoint_Minimap:
-    Flag: int = field(metadata={"order": 1})
-    x: int = field(metadata={"order": 2})
-    y: int = field(metadata={"order": 3})
+    Flag: int
+    x: int
+    y: int
 
 
 @dataclass
 class DungeonMinimapIcon:
-    Icon: int = field(metadata={"order": 1})
-    Count: int = field(metadata={"order": 2})
-    IconPoints: list[IconPoint_Minimap] = field(metadata={"order": 3})
+    Icon: int
+    Count: int
+    IconPoints: list[IconPoint_Minimap] = field(default_factory=list)
 
 
 @dataclass
 class DungeonMinimap:
-    Icons: list[DungeonMinimapIcon] = field(metadata={"order": 1})
+    Icons: list[DungeonMinimapIcon] = field(default_factory=list)
 
 
-@dataclass
 class Scene_MQJson:
-    File: File_MQJson = field(metadata={"order": 1})
-    Id: int = field(metadata={"order": 2})
-    TActors: list[str] = field(metadata={"order": 3})
-    Paths: list[Path_MQJson] = field(metadata={"order": 4})
-    Rooms: list[Room_MQJson] = field(metadata={"order": 5})
-    # ColDelta: Col_MQJson = field(metadata={"order": 6})
-    Floormaps: list[DungeonFloor] = field(metadata={"order": 7})
-    Minimaps: list[DungeonMinimap] = field(metadata={"order": 8})
+    File: File_MQJson
+    Id: int
+    TActors: list[str]
+    Paths: list[Path_MQJson]
+    Rooms: list[Room_MQJson]
+    ColDelta: Col_MQJson
+    Floormaps: list[DungeonFloor]
+    Minimaps: list[DungeonMinimap]
 
     def __init__(self, rom: Rom, id: int, start: int, end: int) -> None:
         self.File = File_MQJson(
@@ -184,7 +225,7 @@ class Scene_MQJson:
         self.TActors = []
         self.Paths = []
         self.Rooms = []
-        # self.ColDelta = ???
+        self.ColDelta = None
         self.Floormaps = []
         self.Minimaps = []
 
@@ -203,16 +244,30 @@ class Scene_MQJson:
             )
             cursor += 8
 
-            if command.code == HeaderCommand.PathList:
-                offset = command.data2 & 0x00FFFFFF
-                self.init_paths(rom, start, offset)
-            elif command.code == HeaderCommand.TransitionActorList:
+            if command.code == HeaderCommand.TransitionActorList:
                 num_t_actors = command.data1
                 offset = command.data2 & 0x00FFFFFF
                 self.init_t_actors(rom, start, offset, num_t_actors)
+            elif command.code == HeaderCommand.PathList:
+                offset = command.data2 & 0x00FFFFFF
+                self.init_paths(rom, start, offset)
             elif command.code == HeaderCommand.RoomList:
-                self.rooms_count = command.data1
-                self.rooms_address = command.data2
+                num_rooms = command.data1
+                offset = command.data2 & 0x00FFFFFF
+                self.init_rooms(rom, start, offset, num_rooms)
+            elif command.code == HeaderCommand.Collision:
+                offset = command.data2 & 0x00FFFFFF
+                self.init_collision(rom, start, offset)
+
+    def init_t_actors(self, rom: Rom, start: int, offset: int, num_t_actors: int) -> None:
+        cursor: int = start + offset
+        for _ in range(num_t_actors):
+            t_actor_data: list[int] = []
+            for _ in range(8):
+                t_actor_data.append(rom.read_int16(cursor))
+                cursor += 2
+            t_actor = ' '.join([f'{x:04X}' for x in t_actor_data])
+            self.TActors.append(t_actor)
 
     def init_paths(self, rom: Rom, start: int, offset: int) -> None:
         cursor: int = start + offset
@@ -230,21 +285,109 @@ class Scene_MQJson:
             path_data: list[list[int]] = []
             for i in range(num_nodes):
                 point = [
-                    rom.read_int16(start + offset + 6 * i),
-                    rom.read_int16(start + offset + 6 * i + 2),
-                    rom.read_int16(start + offset + 6 * i + 4),
+                    rom.read_int16(start + offset + (i * 6)),
+                    rom.read_int16(start + offset + (i * 6) + 2),
+                    rom.read_int16(start + offset + (i * 6) + 4),
                 ]
                 path_data.append(point)
-            self.Paths.append(Path_MQJson(Points=path_data))
 
-    def init_t_actors(self, rom: Rom, start: int, offset: int, num_t_actors: int) -> None:
-        cursor: int = start + offset
-        for _ in range(num_t_actors):
-            t_actor_data: list[int] = []
-            for _ in range(8):
-                t_actor_data.append(rom.read_int16(cursor))
-                cursor += 2
-            self.TActors.append(' '.join([f'{x:04X}' for x in t_actor_data]))
+            path = Path_MQJson(path_data)
+            self.Paths.append(path)
+
+    def init_rooms(self, rom: Rom, start: int, offset: int, num_rooms: int) -> None:
+        for room_id in range(num_rooms):
+            room_start = rom.read_int32(start + offset + (room_id * 8))
+            room_end = rom.read_int32(start + offset + (room_id * 8) + 4)
+            room = Room_MQJson(rom, self.Id, room_id, room_start, room_end)
+            self.Rooms.append(room)
+
+    def init_collision(self, rom: Rom, start: int, offset: int) -> None:
+        is_larger: bool = False
+
+        min_vertex: ColVertex_MQJson = ColVertex_MQJson(
+            -1,
+            rom.read_int16(start + offset),
+            rom.read_int16(start + offset + 2),
+            rom.read_int16(start + offset + 4),
+        )
+        max_vertex: ColVertex_MQJson = ColVertex_MQJson(
+            -1,
+            rom.read_int16(start + offset + 0x06),
+            rom.read_int16(start + offset + 0x06 + 2),
+            rom.read_int16(start + offset + 0x06 + 4),
+        )
+
+        num_vertices: int = rom.read_int16(start + offset + 0x0C)
+        vertices_offset: int = rom.read_int32(start + offset + 0x10) & 0x00FFFFFF
+        vertices = []
+        for i in range(num_vertices):
+            vertex = ColVertex_MQJson(
+                i,
+                rom.read_int16(start + vertices_offset + (i * 6)),
+                rom.read_int16(start + vertices_offset + (i * 6) + 2),
+                rom.read_int16(start + vertices_offset + (i * 6) + 4),
+            )
+            vertices.append(vertex)
+
+        num_polys: int = rom.read_int16(start + offset + 0x14)
+        polys_offset: int = rom.read_int32(start + offset + 0x18) & 0x00FFFFFF
+        polys = []
+        for i in range(num_polys):
+            poly = ColPoly_MQJson(
+                i,
+                rom.read_int16(start + polys_offset + (i * 16)),
+                (rom.read_byte(start + polys_offset + (i * 16) + 2) & 0xE0) >> 5,
+            )
+            polys.append(poly)
+
+        polytypes_offset: int = rom.read_int32(start + offset + 0x18) & 0x00FFFFFF
+        num_polytypes: int = (polys_offset - polytypes_offset) // 8
+        polytypes = []
+        if polytypes_offset != 0:
+            for i in range(num_polytypes):
+                polytype = ColMat_MQJson(
+                    i,
+                    rom.read_int32(start + polytypes_offset + (i * 8)),
+                    rom.read_int32(start + polytypes_offset + (i * 8) + 4),
+                )
+                polytypes.append(polytype)
+
+        cams_offset: int = rom.read_int32(start + offset + 0x20) & 0x00FFFFFF
+        num_cams: int = (polytypes_offset - cams_offset) // 8
+        cams = []
+        if cams_offset != 0:
+            for i in range(num_cams):
+                cam = ColCam_MQJson(
+                    rom.read_int32(start + cams_offset + (i * 8)),
+                    i,
+                )
+                cams.append(cam)
+
+        num_waterboxes: int = rom.read_int16(start + offset + 0x24)
+        waterboxes_offset: int = rom.read_int16(start + offset + 0x28) & 0x00FFFFFF
+        waterboxes = []
+        for i in range(num_waterboxes):
+            waterbox = ColWaterBox_MQJson(
+                i,
+                [rom.read_int16(start + waterboxes_offset + (i * 16) + (j * 2)) for j in range(8)]
+            )
+            waterboxes.append(waterbox)
+
+        self.ColDelta = Col_MQJson(
+            is_larger,
+            min_vertex,
+            max_vertex,
+            num_vertices,
+            vertices,
+            num_polys,
+            polys,
+            num_polytypes,
+            polytypes,
+            num_cams,
+            cams,
+            num_waterboxes,
+            waterboxes,
+        )
 
 
 # scene_table = 0x00BA0BB0 # for MQ
@@ -252,10 +395,11 @@ class Scene_MQJson:
 
 def generate_mq_json(rom: Rom, scene_table=0x00B71440):
     mq_json = []
-    for id in range(0x00, 0x65):
-        start = rom.read_int32(scene_table + (id * 0x14))
-        end = rom.read_int32(scene_table + (id * 0x14) + 4)
-        mq_json.append(Scene_MQJson(rom, id, start, end))
+    for scene_id in range(0x00, 0x65):
+        scene_start = rom.read_int32(scene_table + (scene_id * 0x14))
+        scene_end = rom.read_int32(scene_table + (scene_id * 0x14) + 4)
+        scene = Scene_MQJson(rom, scene_id, scene_start, scene_end)
+        mq_json.append(scene)
     return mq_json
 
 
@@ -263,7 +407,7 @@ class EnhancedJSONEncoder(JSONEncoder):
     def default(self, o):
         if is_dataclass(o):
             return asdict(o)
-        return super().default(o)
+        return o.__dict__
 
 
 mq_json = generate_mq_json(Rom("zeloot_mqdebug.z64"))

@@ -44,6 +44,7 @@
 # As such, if the file moves, the patch will break.
 
 from __future__ import annotations
+from enum import Enum
 import json
 from struct import pack, unpack
 from typing import Optional, Any
@@ -737,6 +738,98 @@ def add_relocations(rom: Rom, file: File, addresses: list[int | tuple[int, int]]
     file.end += (new_header_size - header_size)
 
 
+class RecordType(str, Enum):
+    # Scene header record types
+    AlternateHeader = 'AlternateHeader'
+    RoomList = 'RoomList'
+    TransitionActorList = 'TransitionActorList'
+    CollisionHeader = 'CollisionHeader'
+    EntranceList = 'EntranceList'
+    PathList = 'PathList'
+    SpawnList = 'SpawnList'
+    ExitList = 'ExitList'
+    LightSettings = 'LightSettings'
+    CutsceneData = 'CutsceneData'
+
+    # Collision header record types
+    Vertices = 'Vertices'
+    Polys = 'Polys'
+    Polytypes = 'Polytypes'
+    Cams = 'Cams'
+    Waterboxes = 'Waterboxes'
+
+    # Room header record types
+    RoomMesh = 'RoomMesh'
+    ObjectList = 'ObjectList'
+    ActorList = 'ActorList'
+
+
+class DataRecord:
+    def __init__(self, rom: Rom, type: RecordType, start: int, offset: int, length: int) -> None:
+        self.rom: Rom = rom
+        self.type: RecordType = type
+        self.start: int = start
+        self.offset: int = offset
+        self.length: int = length
+
+        self.data: bytearray = self.rom.read_bytes(start + offset, length)
+
+
+class PointerRecord:
+    def __init__(self, rom: Rom, start: int, offset: int, record: DataRecord) -> None:
+        self.rom: Rom = rom
+        self.start: int = start
+        self.offset: int = offset
+        self.record: DataRecord = record
+
+
+class SceneDataRelocator:
+    def __init__(self, rom: Rom, name: str, start: int, end: int, alternate: Optional[int]) -> None:
+        self.rom: Rom = rom
+        self.name: str = name
+        self.start: int = start
+        self.end: int = end
+        self.alternate: int = alternate if alternate is not None else 0
+
+        self.records: list[PointerRecord] = []
+        self.add_scene_header_records()
+        self.add_collision_header_records()
+
+    def add_scene_header_records(self) -> None:
+        print(f"Adding scene header records for {self.name}")
+
+    def add_collision_header_records(self) -> None:
+        print(f"Adding collision header records for {self.name}")
+
+
+class RoomDataRelocator:
+    def __init__(self, rom: Rom, name: int, start: int, end: int, alternate: Optional[int]) -> None:
+        self.name: int = name
+        self.start: int = start
+        self.end: int = end
+        self.alternate: int = alternate if alternate is not None else 0
+
+        self.records: list[PointerRecord] = []
+        self.add_room_header_records()
+
+    def add_room_header_records(self) -> None:
+        print(f"Adding room header records for {self.name}")
+
+
+def fully_mix_skulls(rom: Rom):
+    gold_skulls = get_gold_skulls(rom)
+    for (offset, (scene_num, room_num, setup_num, actor_num, scene_name, gold_skull)) in gold_skulls.items():
+        # print(f"Scene {scene_num}, Room {room_num}, Setup {setup_num}, {scene_name}")
+        item_id = gold_skull['item_id']
+        if item_id == 'Night Gold Skulltula':
+            variable = int(gold_skull['variable'], 16)
+            updated_variable = 0x8000 | (variable & 0x1FFF)
+            rom.write_int16(offset + 14, updated_variable)
+
+
+rom = Rom("ZOOTDEC.z64")
+fully_mix_skulls(rom)
+
 # rooms: list[tuple[int, int, int, str]] = [
 #     (0x01F28000, 0x01F438A0, 0x01B8A0, 'ddan_room_0'),
 #     (0x01F44000, 0x01F4DB00, 0x009B00, 'ddan_room_1'),
@@ -1127,13 +1220,3 @@ def add_relocations(rom: Rom, file: File, addresses: list[int | tuple[int, int]]
 #     (0x0344F000, 0x03466B80, 0x017B80, 'ganontikasonogo_room_0'),
 #     (0x03467000, 0x03470F20, 0x009F20, 'ganontikasonogo_room_1'),
 # ]
-
-
-def fully_mix_skulls(rom: Rom):
-    gold_skulls = get_gold_skulls(rom)
-    for (offset, (scene_num, room_num, setup_num, scene_name, gold_skull_data)) in gold_skulls.items():
-        item_id = gold_skull_data['item_id']
-        if item_id == 'Night Gold Skulltula':
-            variable = int(gold_skull_data['variable'], 16)
-            updated_variable = 0x8000 | (variable & 0x1FFF)
-            rom.write_bytes(offset + 14, [updated_variable >> 8, updated_variable & 0xFF])

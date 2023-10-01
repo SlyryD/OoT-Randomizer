@@ -42,6 +42,7 @@ def room_get_actors(rom, actor_func, room_data, scene, room_id, setup_num, alter
         if command == 0x01: # actor list
             actor_count = rom.read_byte(room_data + 1)
             actor_list = room_start + (rom.read_int32(room_data + 4) & 0x00FFFFFF)
+            print(f'Actor List {actor_list} - {actor_list + (16 * actor_count)}, Scene {scene}, Room {room_id}, Setup {setup_num}, Actor Count {actor_count}')
             for _ in range(0, actor_count):
                 actor_id = rom.read_int16(actor_list)
                 entry = actor_func(rom, actor_id, actor_list, scene, room_id, setup_num, _)
