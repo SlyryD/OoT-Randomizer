@@ -71,9 +71,12 @@ class File:
     def from_json(cls, file: dict[str, Optional[str]]) -> File:
         return cls(
             file['Name'],
-            int(file['Start'], 16) if file.get('Start', None) is not None else 0,
-            int(file['End'], 16) if file.get('End', None) is not None else None,
-            int(file['RemapStart'], 16) if file.get('RemapStart', None) is not None else None
+            int(file['Start'], 16) if file.get(
+                'Start', None) is not None else 0,
+            int(file['End'], 16) if file.get(
+                'End', None) is not None else None,
+            int(file['RemapStart'], 16) if file.get(
+                'RemapStart', None) is not None else None
         )
 
     def __repr__(self) -> str:
@@ -112,7 +115,8 @@ class CollisionMesh:
 
     def write_to_scene(self, rom: Rom, start: int) -> None:
         addr = start + self.offset + 0x18
-        rom.write_int32s(addr, [self.poly_addr, self.polytypes_addr, self.camera_data_addr])
+        rom.write_int32s(
+            addr, [self.poly_addr, self.polytypes_addr, self.camera_data_addr])
 
 
 class ColDelta:
@@ -127,7 +131,8 @@ class Icon:
     def __init__(self, data: dict[str, int | list[dict[str, int]]]) -> None:
         self.icon: int = data["Icon"]
         self.count: int = data["Count"]
-        self.points: list[IconPoint] = [IconPoint(x) for x in data["IconPoints"]]
+        self.points: list[IconPoint] = [
+            IconPoint(x) for x in data["IconPoints"]]
 
     def write_to_minimap(self, rom: Rom, addr: int) -> None:
         rom.write_sbyte(addr, self.icon)
@@ -168,12 +173,15 @@ class Scene:
     def __init__(self, scene: dict[str, Any]) -> None:
         self.file: File = File.from_json(scene['File'])
         self.id: int = scene['Id']
-        self.transition_actors: list[list[int]] = [convert_actor_data(x) for x in scene['TActors']]
+        self.transition_actors: list[list[int]] = [
+            convert_actor_data(x) for x in scene['TActors']]
         self.rooms: list[Room] = [Room(x) for x in scene['Rooms']]
         self.paths: list[list[list[int]]] = []
         self.coldelta: ColDelta = ColDelta(scene["ColDelta"])
-        self.minimaps: list[list[Icon]] = [[Icon(icon) for icon in minimap['Icons']] for minimap in scene['Minimaps']]
-        self.floormaps: list[list[Icon]] = [[Icon(icon) for icon in floormap['Icons']] for floormap in scene['Floormaps']]
+        self.minimaps: list[list[Icon]] = [
+            [Icon(icon) for icon in minimap['Icons']] for minimap in scene['Minimaps']]
+        self.floormaps: list[list[Icon]] = [
+            [Icon(icon) for icon in floormap['Icons']] for floormap in scene['Floormaps']]
         temp_paths = scene['Paths']
         for item in temp_paths:
             self.paths.append(item['Points'])
@@ -293,7 +301,8 @@ class Scene:
 
             # append to end of file
             self.write_cam_data(rom, self.file.end, final_cams)
-            mesh.camera_data_addr = get_segment_address(2, self.file.end - self.file.start)
+            mesh.camera_data_addr = get_segment_address(
+                2, self.file.end - self.file.start)
             self.file.end += len(final_cams) * 8
 
         else:
@@ -309,7 +318,8 @@ class Scene:
             b_start = self.file.start + (types_move_addr & 0xFFFFFF)
             size = mesh.polytypes * 8
 
-            rom.buffer[b_start:b_start + size] = rom.buffer[a_start:a_start + size]
+            rom.buffer[b_start:b_start +
+                       size] = rom.buffer[a_start:a_start + size]
             mesh.polytypes_addr = types_move_addr
 
         # patch polytypes
@@ -317,7 +327,8 @@ class Scene:
             id = item['Id']
             high = item['High']
             low = item['Low']
-            addr = self.file.start + (mesh.polytypes_addr & 0xFFFFFF) + (id * 8)
+            addr = self.file.start + \
+                (mesh.polytypes_addr & 0xFFFFFF) + (id * 8)
             rom.write_int32s(addr, [high, low])
 
         # patch poly data
@@ -327,7 +338,7 @@ class Scene:
             flags = item['Flags']
 
             addr = self.file.start + (mesh.poly_addr & 0xFFFFFF) + (id * 0x10)
-            vert_bit =  rom.read_byte(addr + 0x02) & 0x1F  # VertexA id data
+            vert_bit = rom.read_byte(addr + 0x02) & 0x1F  # VertexA id data
             rom.write_int16(addr, t)
             rom.write_byte(addr + 0x02, (flags << 5) + vert_bit)
 
@@ -374,7 +385,8 @@ class Room:
         self.file: File = File.from_json(room['File'])
         self.id: int = room['Id']
         self.objects: list[int] = [int(x, 16) for x in room['Objects']]
-        self.actors: list[list[int]] = [convert_actor_data(x) for x in room['Actors']]
+        self.actors: list[list[int]] = [
+            convert_actor_data(x) for x in room['Actors']]
 
     def write_data(self, rom: Rom) -> None:
         # move file to remap address
@@ -389,7 +401,7 @@ class Room:
         while loop != 0 and code != 0x14:  # terminator
             loop -= 1
 
-            if code == 0x01: # actors
+            if code == 0x01:  # actors
                 offset = self.file.end - self.file.start
                 write_actor_data(rom, self.file.end, self.actors)
                 self.file.end += len(self.actors) * 0x10
@@ -397,7 +409,7 @@ class Room:
                 rom.write_byte(headcur + 1, len(self.actors))
                 rom.write_int32(headcur + 4, get_segment_address(3, offset))
 
-            elif code == 0x0B: # objects
+            elif code == 0x0B:  # objects
                 offset = self.append_object_data(rom, self.objects)
 
                 rom.write_byte(headcur + 1, len(self.objects))
@@ -438,7 +450,7 @@ def get_json() -> Any:
 
 def convert_actor_data(string: str) -> list[int]:
     spawn_args = string.split(" ")
-    return [ int(x,16) for x in spawn_args ]
+    return [int(x, 16) for x in spawn_args]
 
 
 def get_segment_address(base: int, offset: int) -> int:
@@ -477,12 +489,14 @@ def patch_spirit_temple_mq_room_6(rom: Rom, room_addr: int) -> None:
     alt_data_off = header_size + 8
 
     # set new alternate header offset
-    alt_header_off = align16(alt_data_off + (4 * 3))  # alt header record size * num records
+    # alt header record size * num records
+    alt_header_off = align16(alt_data_off + (4 * 3))
 
     # write alternate header data
     # the first 3 words are mandatory. the last 3 are just to make the binary
     # cleaner to read
-    rom.write_int32s(room_addr + alt_data_off, [0, get_segment_address(3, alt_header_off), 0, 0, 0, 0])
+    rom.write_int32s(room_addr + alt_data_off,
+                     [0, get_segment_address(3, alt_header_off), 0, 0, 0, 0])
 
     # clone header
     a_start = room_addr
@@ -598,9 +612,9 @@ def insert_space(rom: Rom, file: File, vram_start: int, insert_section: int, ins
         if insert_section == section and offset >= insert_offset:
             # rebuild new relocation entry
             rom.write_int32(cur,
-                ((section + 1) << 30) |
-                (type << 24) |
-                (offset + insert_size))
+                            ((section + 1) << 30) |
+                            (type << 24) |
+                            (offset + insert_size))
 
         # value contains the vram address
         value = rom.read_int32(address)
@@ -660,7 +674,8 @@ def insert_space(rom: Rom, file: File, vram_start: int, insert_section: int, ins
         cur += 4
 
     # Move rom bytes
-    rom.buffer[(insert_rom + insert_size):(file.end + insert_size)] = rom.buffer[insert_rom:file.end]
+    rom.buffer[(insert_rom + insert_size):(file.end + insert_size)
+               ] = rom.buffer[insert_rom:file.end]
     rom.buffer[insert_rom:(insert_rom + insert_size)] = [0] * insert_size
     file.end += insert_size
 
@@ -696,12 +711,12 @@ def add_relocations(rom: Rom, file: File, addresses: list[int | tuple[int, int]]
             # Otherwise, try to infer type from value
             value = rom.read_int32(address)
             op = value >> 26
-            type = 2 # default: data
-            if op == 0x02 or op == 0x03: # j or jal
+            type = 2  # default: data
+            if op == 0x02 or op == 0x03:  # j or jal
                 type = 4
-            elif op == 0x0F: # lui
+            elif op == 0x0F:  # lui
                 type = 5
-            elif op == 0x08: # addi
+            elif op == 0x08:  # addi
                 type = 6
 
         # Calculate section and offset
@@ -716,12 +731,12 @@ def add_relocations(rom: Rom, file: File, addresses: list[int | tuple[int, int]]
 
         # generate relocation entry
         relocations.append((section << 30)
-                        | (type << 24)
-                        | (offset & 0x00FFFFFF))
+                           | (type << 24)
+                           | (offset & 0x00FFFFFF))
 
     # Rebuild Relocation Table
     cur = header + 0x10
-    relocations.sort(key = lambda val: val & 0xC0FFFFFF)
+    relocations.sort(key=lambda val: val & 0xC0FFFFFF)
     rom.write_int32(cur, len(relocations))
     cur += 4
     for relocation in relocations:
@@ -784,26 +799,80 @@ class PointerRecord:
 
 
 class SceneDataRelocator:
-    def __init__(self, rom: Rom, name: str, start: int, end: int, alternate: Optional[int]) -> None:
+    def __init__(self, rom: Rom, name: str, start: int, end: int) -> None:
         self.rom: Rom = rom
         self.name: str = name
         self.start: int = start
         self.end: int = end
-        self.alternate: int = alternate if alternate is not None else 0
 
         self.records: list[PointerRecord] = []
+        self.rooms: list[RoomDataRelocator] = []
         self.add_scene_header_records()
         self.add_collision_header_records()
 
-    def add_scene_header_records(self) -> None:
-        print(f"Adding scene header records for {self.name}")
+    def add_scene_header_records(self, alternate: Optional[int] = None) -> None:
+        scene_cursor = alternate if alternate else self.start
+        command = 0
+        while command != 0x14:  # 0x14 = end header
+            command = self.rom.read_byte(scene_cursor)
+            count = self.rom.read_byte(scene_cursor + 1)
+            offset = self.rom.read_int24(scene_cursor + 5)
+            if command == 0x18:  # AlternateHeader
+                self.records.append(PointerRecord(self.rom, self.start, command_offset, DataRecord(
+                    self.rom, RecordType.AlternateHeader, self.start, offset, length)))
+
+                header_list_offset = self.start + offset
+                for i in range(3):  # TODO.Sly: Track all alternate headers
+                    alt_header_offset = self.rom.read_int24(
+                        header_list_offset + (i * 4) + 1)
+                    if alt_header_offset != 0:
+                        self.add_scene_header_records(
+                            self.start + alt_header_offset)
+            elif command == 0x04:  # RoomList
+                self.records.append(PointerRecord(self.rom, self.start, command_offset, DataRecord(
+                    self.rom, RecordType.RoomList, self.start, offset, count * 8)))
+
+                # Assume room list is identical for all headers, process just for the main one
+                if alternate is None:
+                    for i in range(count):
+                        room_start = self.rom.read_int32(
+                            self.start + offset + (i * 8))
+                        room_end = self.rom.read_int32(
+                            self.start + offset + (i * 8) + 4)
+                        self.rooms.append(RoomDataRelocator(
+                            self.rom, f'{self.name}, Room {i}', room_start, room_end))
+            elif command == 0x0E:  # TransitionActorList
+                self.records.append(PointerRecord(self.rom, self.start, command_offset, DataRecord(
+                    self.rom, RecordType.TransitionActorList, self.start, offset, count * 16)))
+            elif command == 0x03:  # CollisionHeader
+                self.records.append(PointerRecord(self.rom, self.start, command_offset, DataRecord(
+                    self.rom, RecordType.CollisionHeader, self.start, offset, length)))
+            elif command == 0x06:  # EntranceList
+                self.records.append(PointerRecord(self.rom, self.start, command_offset, DataRecord(
+                    self.rom, RecordType.EntranceList, self.start, offset, length)))
+            elif command == 0x0D:  # PathList
+                self.records.append(PointerRecord(self.rom, self.start, command_offset, DataRecord(
+                    self.rom, RecordType.PathList, self.start, offset, length)))
+            elif command == 0x00:  # SpawnList
+                self.records.append(PointerRecord(self.rom, self.start, command_offset, DataRecord(
+                    self.rom, RecordType.SpawnList, self.start, offset, count * 16)))
+            elif command == 0x13:  # ExitList
+                self.records.append(PointerRecord(self.rom, self.start, command_offset, DataRecord(
+                    self.rom, RecordType.ExitList, self.start, offset, length))) # TODO.Sly: count * 2, align?
+            elif command == 0x0F:  # LightSettings
+                self.records.append(PointerRecord(self.rom, self.start, command_offset, DataRecord(
+                    self.rom, RecordType.LightSettings, self.start, offset, count * 22))) # TODO.Sly: align
+            elif command == 0x17:  # CutsceneData
+                self.records.append(PointerRecord(self.rom, self.start, command_offset, DataRecord(
+                    self.rom, RecordType.CutsceneData, self.start, offset, length)))
+            scene_cursor += 8
 
     def add_collision_header_records(self) -> None:
         print(f"Adding collision header records for {self.name}")
 
 
 class RoomDataRelocator:
-    def __init__(self, rom: Rom, name: int, start: int, end: int, alternate: Optional[int]) -> None:
+    def __init__(self, rom: Rom, name: int, start: int, end: int, alternate: Optional[int] = None) -> None:
         self.name: int = name
         self.start: int = start
         self.end: int = end
