@@ -755,7 +755,8 @@ def add_relocations(rom: Rom, file: File, addresses: list[int | tuple[int, int]]
 
 class RecordType(str, Enum):
     # Scene header record types
-    AlternateHeader = 'AlternateHeader'
+    SceneHeader = 'SceneHeader'
+    AlternateHeaders = 'AlternateHeaders'
     RoomList = 'RoomList'
     TransitionActorList = 'TransitionActorList'
     CollisionHeader = 'CollisionHeader'
@@ -780,7 +781,7 @@ class RecordType(str, Enum):
     ActorList = 'ActorList'
 
     # Data at the end of the file not referenced by a header
-    DoNotMove = 'DoNotMove'
+    Unreferenced = 'Unreferenced'
 
 
 class DataRecord:
@@ -796,20 +797,22 @@ class DataRecord:
     def to_json(self) -> dict[str, Any]:
         return {
             'type': self.type.value,
-            'offset': f'0x{self.offset:08X}',
-            'length': self.length
+            'start_offset': f'0x{self.offset:08X}',
+            'end_offset': f'0x{self.offset + self.length:08X}'
         }
 
 
 class PointerRecord:
-    def __init__(self, rom: Rom, start: int, offset: int, record: DataRecord) -> None:
+    def __init__(self, rom: Rom, type: RecordType, start: int, offset: int, record: DataRecord) -> None:
         self.rom: Rom = rom
+        self.type: RecordType = type
         self.start: int = start
         self.offset: int = offset
         self.record: DataRecord = record
 
     def to_json(self) -> dict[str, Any]:
         return {
+            'type': self.type.value,
             'offset': f'0x{self.offset:08X}',
             'record': self.record.to_json()
         }
@@ -822,12 +825,27 @@ class SceneDataRelocator:
         self.start: int = start
         self.end: int = end
 
-        self.records: list[PointerRecord] = []
+        self.data_records: list[DataRecord] = []
+        self.pointer_records: list[PointerRecord] = []
         self.rooms: list[RoomDataRelocator] = []
-        self.parse_scene_header()
 
-    def parse_scene_header(self, alternate: Optional[int] = None) -> None:
-        scene_cursor: int = alternate if alternate else self.start
+        # Parse scene header
+        header_length = self.parse_scene_header()
+        self.data_records.append(DataRecord(
+            self.rom, RecordType.SceneHeader, self.start, 0, header_length))
+
+        # Sort records by offset
+        self.sort_records()
+
+        # Add unreferenced data record from last referenced data record to end of file
+        self.add_unreferenced_record()
+
+        # Fix missing lengths
+        self.fix_missing_lengths()
+
+    def parse_scene_header(self, alternate: Optional[int] = None) -> int:
+        scene_start: int = alternate if alternate else self.start
+        scene_cursor: int = scene_start
         alternate_headers: list[int] = []
         room_list: list[tuple[int, int]] = []
         collision_header: int = 0
@@ -835,49 +853,50 @@ class SceneDataRelocator:
             command = self.rom.read_byte(scene_cursor)
             count = self.rom.read_byte(scene_cursor + 1)
             offset = self.rom.read_int24(scene_cursor + 5)
-            if command == 0x18:  # AlternateHeader
+            if command == 0x18:  # AlternateHeaders
                 alternate_headers = self.get_alternate_headers(offset)
+                record_type = RecordType.AlternateHeaders
                 length = len(alternate_headers) * 4
-                self.records.append(PointerRecord(self.rom, self.start, scene_cursor - self.start, DataRecord(
-                    self.rom, RecordType.AlternateHeader, self.start, offset, length)))
             elif command == 0x04:  # RoomList
                 room_list = self.get_room_list(offset, count)
+                record_type = RecordType.RoomList
                 length = len(room_list) * 8
-                self.records.append(PointerRecord(self.rom, self.start, scene_cursor - self.start, DataRecord(
-                    self.rom, RecordType.RoomList, self.start, offset, length)))
             elif command == 0x0E:  # TransitionActorList
+                record_type = RecordType.TransitionActorList
                 length = count * 16
-                self.records.append(PointerRecord(self.rom, self.start, scene_cursor - self.start, DataRecord(
-                    self.rom, RecordType.TransitionActorList, self.start, offset, length)))
             elif command == 0x03:  # CollisionHeader
+                # TODO.Sly: Dedupe data records like this one
+                # TODO.Sly: What to do about unreferenced data in the middle of the file?
                 collision_header = offset
-                length = 0x2C  # Fixed length, though 0x20 - 0x2C may be set to 0
-                self.records.append(PointerRecord(self.rom, self.start, scene_cursor - self.start, DataRecord(
-                    self.rom, RecordType.CollisionHeader, self.start, offset, length)))
+                record_type = RecordType.CollisionHeader
+                length = 0x2C
             elif command == 0x06:  # EntranceList
-                self.records.append(PointerRecord(self.rom, self.start, scene_cursor - self.start, DataRecord(
-                    self.rom, RecordType.EntranceList, self.start, offset, -1)))
+                record_type = RecordType.EntranceList
+                length = -1
             elif command == 0x0D:  # PathList
                 path_list = self.get_path_list(offset)
                 self.iterate_path_list(path_list)
+                record_type = RecordType.PathList
                 length = len(path_list) * 8
-                self.records.append(PointerRecord(self.rom, self.start, scene_cursor - self.start, DataRecord(
-                    self.rom, RecordType.PathList, self.start, offset, length)))
             elif command == 0x00:  # SpawnList
+                record_type = RecordType.SpawnList
                 length = count * 16
-                self.records.append(PointerRecord(self.rom, self.start, scene_cursor - self.start, DataRecord(
-                    self.rom, RecordType.SpawnList, self.start, offset, length)))
             elif command == 0x13:  # ExitList
-                self.records.append(PointerRecord(self.rom, self.start, scene_cursor - self.start, DataRecord(
-                    self.rom, RecordType.ExitList, self.start, offset, -1)))
+                record_type = RecordType.ExitList
+                length = -1
             elif command == 0x0F:  # LightSettings
-                self.records.append(PointerRecord(self.rom, self.start, scene_cursor - self.start, DataRecord(
-                    self.rom, RecordType.LightSettings, self.start, offset, -1)))
+                record_type = RecordType.LightSettings
+                length = -1
             elif command == 0x17:  # CutsceneData
-                self.records.append(PointerRecord(self.rom, self.start, scene_cursor - self.start, DataRecord(
-                    self.rom, RecordType.CutsceneData, self.start, offset, -1)))
+                record_type = RecordType.CutsceneData
+                length = -1
             elif command == 0x14:  # Terminator
+                scene_cursor += 8
                 break
+            else:  # Commands without pointers to data
+                scene_cursor += 8
+                continue
+            self.add_records(record_type, offset, length, scene_cursor)
             scene_cursor += 8
         # Assume collision header and room list are the same for all headers
         # Iterate alternate headers just for the main scene header
@@ -885,10 +904,18 @@ class SceneDataRelocator:
             self.parse_collision_header(collision_header)
             self.iterate_alternate_headers(alternate_headers)
             self.iterate_room_list(room_list)
-        # Fix missing lengths
-        self.fix_missing_lengths()
+        # Return scene header length
+        return scene_cursor - scene_start
 
-    def get_alternate_headers(self, offset: int) -> list[int]:
+    def add_records(self, record_type: RecordType, offset: int, length: int, cursor: int) -> None:
+        data_record = DataRecord(
+            self.rom, record_type, self.start, offset, length)
+        self.data_records.append(data_record)
+        pointer_record = PointerRecord(
+            self.rom, record_type, self.start, cursor - self.start, data_record)
+        self.pointer_records.append(pointer_record)
+
+    def get_alternate_headers(self, offset: int) -> list[tuple[int, int]]:
         alternate_headers = []
         alternate_cursor = self.start + offset
         while True:
@@ -896,7 +923,7 @@ class SceneDataRelocator:
             header_offset = self.rom.read_int24(alternate_cursor + 1)
             if segment != 0x02 and header_offset != 0:
                 break
-            alternate_headers.append(header_offset)
+            alternate_headers.append((alternate_cursor, header_offset))
             alternate_cursor += 4
         return alternate_headers
 
@@ -917,89 +944,106 @@ class SceneDataRelocator:
             points_offset = self.rom.read_int24(path_cursor + 5)
             if points_count == 0 or segment != 0x02 or points_offset == 0:
                 break
-            path_offset = path_cursor - self.start
-            path_list.append((path_offset, points_count, points_offset))
+            path_list.append((path_cursor, points_offset, points_count))
             path_cursor += 8
         return path_list
 
-    def iterate_path_list(self, path_list: list[tuple[int, int, int]]) -> None:
-        for (path_offset, points_count, points_offset) in path_list:
-            points_length = align4(points_count * 6)
-            self.records.append(PointerRecord(self.rom, self.start, path_offset, DataRecord(
-                self.rom, RecordType.Points, self.start, points_offset, points_length)))
-
     def iterate_alternate_headers(self, alternate_headers: list[int]) -> None:
-        for header_offset in alternate_headers:
+        for (alternate_cursor, header_offset) in alternate_headers:
             if header_offset != 0:
-                self.parse_scene_header(self.start + header_offset)
+                header_start = self.start + header_offset
+                header_length = self.parse_scene_header(header_start)
+                self.add_records(RecordType.SceneHeader,
+                                 header_offset, header_length, alternate_cursor)
 
     def iterate_room_list(self, room_list: list[tuple[int, int]]) -> None:
         for (i, (room_start, room_end)) in enumerate(room_list):
             self.rooms.append(RoomDataRelocator(
                 self.rom, f'{self.name}, Room {i}', room_start, room_end))
 
+    def iterate_path_list(self, path_list: list[tuple[int, int, int]]) -> None:
+        for (path_cursor, points_offset, points_count) in path_list:
+            points_length = align4(points_count * 6)
+            self.add_records(RecordType.Points, points_offset,
+                             points_length, path_cursor)
+
     def parse_collision_header(self, offset: int) -> None:
         # Vertices
         collision_cursor = self.start + offset + 0x0C
         vertices_count = self.rom.read_int16(collision_cursor)
         vertices_offset = self.rom.read_int24(collision_cursor + 5)
-        self.records.append(PointerRecord(self.rom, self.start, collision_cursor - self.start, DataRecord(
-            self.rom, RecordType.Vertices, self.start, vertices_offset, align4(vertices_count * 6))))
+        vertices_length = align4(vertices_count * 6)
+        self.add_records(RecordType.Vertices, vertices_offset,
+                         vertices_length, collision_cursor)
         # Polys
         collision_cursor = self.start + offset + 0x14
         polys_count = self.rom.read_int16(collision_cursor)
         polys_offset = self.rom.read_int24(collision_cursor + 5)
-        self.records.append(PointerRecord(self.rom, self.start, collision_cursor - self.start, DataRecord(
-            self.rom, RecordType.Polys, self.start, polys_offset, polys_count * 16)))
+        polys_length = polys_count * 16
+        self.add_records(RecordType.Polys, polys_offset,
+                         polys_length, collision_cursor)
         # Polytypes
         collision_cursor = self.start + offset + 0x1C
         polytypes_offset = self.rom.read_int24(collision_cursor + 1)
-        self.records.append(PointerRecord(self.rom, self.start, collision_cursor - self.start, DataRecord(
-            self.rom, RecordType.Polytypes, self.start, polytypes_offset, -1)))
+        polytypes_length = -1
+        self.add_records(RecordType.Polytypes, polytypes_offset,
+                         polytypes_length, collision_cursor)
         # Cams
         collision_cursor = self.start + offset + 0x20
         cams_offset = self.rom.read_int24(collision_cursor + 1)
+        cams_length = -1
         if cams_offset != 0:
-            self.records.append(PointerRecord(self.rom, self.start, collision_cursor - self.start, DataRecord(
-                self.rom, RecordType.Cams, self.start, cams_offset, -1)))
+            self.add_records(RecordType.Cams, cams_offset,
+                             cams_length, collision_cursor)
         # Waterboxes
         collision_cursor = self.start + offset + 0x24
         waterboxes_count = self.rom.read_int16(collision_cursor)
         waterboxes_offset = self.rom.read_int24(collision_cursor + 5)
+        waterboxes_length = waterboxes_count * 16
         if waterboxes_count != 0 and waterboxes_offset != 0:
-            self.records.append(PointerRecord(self.rom, self.start, collision_cursor - self.start, DataRecord(
-                self.rom, RecordType.Waterboxes, self.start, waterboxes_offset, waterboxes_count * 16)))
+            self.add_records(RecordType.Waterboxes, waterboxes_offset,
+                             waterboxes_length, collision_cursor)
+
+    def sort_records(self) -> None:
+        self.data_records.sort(key=lambda x: x.offset)
+        self.pointer_records.sort(key=lambda x: x.offset)
+
+    def add_unreferenced_record(self) -> None:
+        last_record = self.data_records[-1]
+        if last_record.length == -1:
+            # Cannot determine length of last record
+            data_record = DataRecord(self.rom, RecordType.Unreferenced,
+                                     self.start, last_record.offset, self.end - last_record.offset)
+            self.data_records.pop()
+            self.data_records.append(data_record)
+        else:
+            data_record = DataRecord(self.rom, RecordType.Unreferenced, self.start, last_record.offset +
+                                     last_record.length, self.end - (last_record.offset + last_record.length))
+            self.data_records.append(data_record)
 
     def fix_missing_lengths(self) -> None:
-        records: list[PointerRecord | DataRecord] = self.flatten_records()
-        records_count: int = len(records)
-        # Iterate records in reverse in case we have multiple missing lengths in a row
-        for i in range(records_count):
-            record = records[records_count - i - 1]
-            next_record = records[records_count -
-                                  i] if records_count - i < records_count else None
-            if isinstance(record, DataRecord) and record.length == -1:
-                if next_record is None:
-                    # TODO.Sly: Update data of record
-                    # Cannot figure out length of last record
-                    record.type = RecordType.DoNotMove
-                    record.length = self.end - record.offset
-                else:
-                    record.length = next_record.offset - record.offset
-            # TODO.Sly: Add DoNotMove record to the end
-            if next_record is None and record.type != RecordType.DoNotMove:
-                do_not_move_offset = record.offset + record.length
-                self.records.append(DataRecord(self.rom, RecordType.DoNotMove, self.start, do_not_move_offset, self.end - do_not_move_offset))
-
-    def flatten_records(self) -> list[PointerRecord | DataRecord]:
-        return sorted([x for x in self.records] + [x.record for x in self.records], key=lambda x: x.offset)
+        # Iterate data records in reverse in case we have multiple missing lengths in a row
+        index: int = len(self.data_records) - 1
+        if self.data_records[index].type != RecordType.Unreferenced:
+            raise Exception(
+                "Expected unreferenced record at the end of the scene file")
+        if self.data_records[index].length == -1:
+            raise Exception("Cannot determine length of last record")
+        index -= 1
+        while index >= 0:
+            record = self.data_records[index]
+            next_record = self.data_records[index + 1]
+            if record.length == -1:
+                record.length = next_record.offset - record.offset
+            index -= 1
 
     def to_json(self) -> dict[str, Any]:
         return {
             'name': self.name,
-            'start': self.start,
-            'end': self.end,
-            'records': [x.to_json() for x in self.records],
+            'start': f'{self.start:08X}',
+            'end': f'{self.end:08X}',
+            'data_records': [x.to_json() for x in self.data_records],
+            'pointer_records': [x.to_json() for x in self.pointer_records],
             'rooms': [x.to_json() for x in self.rooms]
         }
 
@@ -1011,11 +1055,23 @@ class RoomDataRelocator:
         self.end: int = end
         self.alternate: int = alternate if alternate is not None else 0
 
-        self.records: list[PointerRecord] = []
+        self.data_records: list[DataRecord] = []
+        self.pointer_records: list[PointerRecord] = []
+
         self.add_room_header_records()
 
     def add_room_header_records(self) -> None:
-        print(f"Adding room header records for {self.name}")
+        print(f"Adding room header data_records for {self.name}")
+
+    def to_json(self) -> dict[str, Any]:
+        return {
+            'name': self.name,
+            'start': self.start,
+            'end': self.end,
+            'alternate': self.alternate,
+            'data_records': [x.to_json() for x in self.data_records],
+            'pointer_records': [x.to_json() for x in self.pointer_records]
+        }
 
 
 def fully_mix_skulls(rom: Rom):
@@ -1036,7 +1092,7 @@ scene_data_relocator = SceneDataRelocator(
     rom, 'spot00_scene', 0x01FB8000, 0x01FE2220)
 # rom, 'ddan_scene', 0x01F12000, 0x01F27140)
 with open('scene_data_relocator.json', 'w') as outfile:
-    json.dump(scene_data_relocator.flatten_records(), outfile,
+    json.dump(scene_data_relocator, outfile,
               default=lambda x: x.to_json(), indent=4)
 
 # rooms: list[tuple[int, int, int, str]] = [
