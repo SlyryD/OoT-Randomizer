@@ -789,6 +789,7 @@ class RecordType(str, Enum):
     Dlist = 'Dlist'
     Vtx = 'Vtx'
     BackgroundEntries = 'BackgroundEntries'
+    Background = 'Background'
     BackgroundSource = 'BackgroundSource'
     BackgroundTlut = 'BackgroundTlut'
     CullableEntries = 'CullableEntries'
@@ -861,47 +862,41 @@ class FileDataRelocator(ABC):
     def parse_file_header(self, alternate: Optional[int] = None) -> DataRecord:
         return NotImplemented
 
-    def add_records(self, record_type: RecordType, offset: int, length: int, cursor: int) -> None:
+    def add_records(self, data_record: DataRecord, cursor: int) -> None:
         # Get existing data record or create a new one
         existing_data_record: Optional[DataRecord] = next(
-            (x for x in self.data_records if x.offset == offset), None)
+            (x for x in self.data_records if x.offset == data_record.offset), None)
         if existing_data_record is not None:
-            if existing_data_record.type != record_type:
+            if existing_data_record.type != data_record.type:
                 raise Exception(
-                    f'Existing data record type {existing_data_record.type} does not match new type {record_type}')
-            if existing_data_record.length != length:
+                    f'Existing data record type {existing_data_record.type} does not match new type {data_record.type}')
+            if existing_data_record.length != data_record.length:
                 raise Exception(
-                    f'Existing data record length {existing_data_record.length} does not match new length {length}')
+                    f'Existing data record length {existing_data_record.length} does not match new length {data_record.length}')
             data_record = existing_data_record
         else:
-            data_record = DataRecord(
-                self.rom, record_type, self.start, offset, length)
             self.data_records.append(data_record)
         # Add pointer record for data record
         pointer_record = PointerRecord(
-            self.rom, record_type, self.start, cursor - self.start, data_record)
+            self.rom, data_record.type, self.start, cursor - self.start, data_record)
         self.pointer_records.append(pointer_record)
 
-    def get_alternate_headers(self, offset: int) -> list[tuple[int, int]]:
-        alternate_headers = []
-        alternate_cursor = self.start + offset
+    def parse_alternate_headers(self, offset: int) -> DataRecord:
+        alternate_start = self.start + offset
+        cursor = alternate_start
         while True:
-            segment = self.rom.read_byte(alternate_cursor)
-            header_offset = self.rom.read_int24(alternate_cursor + 1)
-            if segment != 0x02 and header_offset != 0:
+            header_segment = self.rom.read_byte(cursor)
+            header_offset = self.rom.read_int24(cursor + 0x01)
+            if header_offset == 0:
+                cursor += 4
+                continue
+            elif header_segment != 0x02:
                 break
-            alternate_headers.append((alternate_cursor, header_offset))
-            alternate_cursor += 4
-        return alternate_headers
-
-    def iterate_alternate_headers(self, alternate_headers: list[int]) -> None:
-        for (alternate_cursor, header_offset) in alternate_headers:
-            if header_offset != 0:
-                header_start = self.start + header_offset
-                # Parse file header
-                header_data_record = self.parse_file_header(header_start)
-                self.add_records(header_data_record.type, header_data_record.offset,
-                                 header_data_record.length, alternate_cursor)
+            # Parse file header
+            record = self.parse_file_header(self.start + header_offset)
+            self.add_records(record, cursor)
+            cursor += 4
+        return DataRecord(self.rom, RecordType.AlternateHeaders, self.start, offset, cursor - alternate_start)
 
     def sort_records(self) -> None:
         self.data_records.sort(key=lambda x: x.offset)
@@ -962,134 +957,119 @@ class SceneDataRelocator(FileDataRelocator):
 
     def parse_file_header(self, alternate: Optional[int] = None) -> DataRecord:
         scene_start: int = alternate if alternate is not None else self.start
-        scene_cursor: int = scene_start
-        alternate_headers: list[int] = []
-        room_list: list[tuple[int, int]] = []
-        collision_header: int = 0
+        cursor: int = scene_start
         while True:
-            command = self.rom.read_byte(scene_cursor)
-            count = self.rom.read_byte(scene_cursor + 1)
-            offset = self.rom.read_int24(scene_cursor + 5)
+            command = self.rom.read_byte(cursor)
+            count = self.rom.read_byte(cursor + 0x01)
+            offset = self.rom.read_int24(cursor + 0x05)
             if command == 0x18:  # AlternateHeaders
-                alternate_headers = self.get_alternate_headers(offset)
-                record_type = RecordType.AlternateHeaders
-                length = len(alternate_headers) * 4
+                record = self.parse_alternate_headers(offset)
             elif command == 0x04:  # RoomList
-                room_list = self.get_room_list(offset, count)
-                record_type = RecordType.RoomList
-                length = len(room_list) * 8
+                record = self.parse_room_list(offset, count)
             elif command == 0x0E:  # TransitionActorList
-                record_type = RecordType.TransitionActorList
-                length = count * 16
+                record = DataRecord(
+                    self.rom, RecordType.TransitionActorList, self.start, offset, count * 16)
             elif command == 0x03:  # CollisionHeader
-                collision_header = offset
-                record_type = RecordType.CollisionHeader
-                length = 0x2C
+                record = self.parse_collision_header(offset)
             elif command == 0x06:  # EntranceList
-                record_type = RecordType.EntranceList
-                length = -1
+                record = DataRecord(
+                    self.rom, RecordType.EntranceList, self.start, offset, -1)
             elif command == 0x0D:  # PathList
-                path_list = self.get_path_list(offset)
-                self.iterate_path_list(path_list)
-                record_type = RecordType.PathList
-                length = len(path_list) * 8
+                record = self.parse_path_list(offset)
             elif command == 0x00:  # SpawnList
-                record_type = RecordType.SpawnList
-                length = count * 16
+                record = DataRecord(
+                    self.rom, RecordType.SpawnList, self.start, offset, count * 16)
             elif command == 0x13:  # ExitList
-                record_type = RecordType.ExitList
-                length = -1
+                record = DataRecord(
+                    self.rom, RecordType.ExitList, self.start, offset, -1)
             elif command == 0x0F:  # LightSettings
-                record_type = RecordType.LightSettings
-                length = -1
+                record = DataRecord(
+                    self.rom, RecordType.LightSettings, self.start, offset, -1)
             elif command == 0x17:  # CutsceneData
-                record_type = RecordType.CutsceneData
-                length = -1
+                record = DataRecord(
+                    self.rom, RecordType.CutsceneData, self.start, offset, -1)
             elif command == 0x14:  # Terminator
-                scene_cursor += 8
+                cursor += 8
                 break
             else:  # Commands without pointers to data
-                scene_cursor += 8
+                cursor += 8
                 continue
-            self.add_records(record_type, offset, length, scene_cursor)
-            scene_cursor += 8
-        # Assume collision header and room list are the same for all headers
-        # Iterate alternate headers just for the main scene header
-        if alternate is None:
-            self.parse_collision_header(collision_header)
-            self.iterate_alternate_headers(alternate_headers)
-            self.iterate_room_list(room_list)
+            self.add_records(record, cursor)
+            cursor += 8
         # Return data record for the scene header
-        return DataRecord(self.rom, RecordType.SceneHeader, self.start, scene_start - self.start, scene_cursor - scene_start)
+        return DataRecord(self.rom, RecordType.SceneHeader, self.start, scene_start - self.start, cursor - scene_start)
 
-    def get_room_list(self, offset: int, count: int) -> list[tuple[int, int]]:
-        room_list = []
+    def parse_room_list(self, offset: int, count: int) -> DataRecord:
+        rooms_start = self.start + offset
+        cursor = rooms_start
         for i in range(count):
-            room_start = self.rom.read_int32(self.start + offset + (i * 8))
-            room_end = self.rom.read_int32(self.start + offset + (i * 8) + 4)
-            room_list.append((room_start, room_end))
-        return room_list
-
-    def get_path_list(self, offset: int) -> list[tuple[int, int, int]]:
-        path_list = []
-        path_cursor = self.start + offset
-        while True:
-            points_count = self.rom.read_byte(path_cursor)
-            segment = self.rom.read_byte(path_cursor + 4)
-            points_offset = self.rom.read_int24(path_cursor + 5)
-            if points_count == 0 or segment != 0x02 or points_offset == 0:
-                break
-            path_list.append((path_cursor, points_offset, points_count))
-            path_cursor += 8
-        return path_list
-
-    def iterate_room_list(self, room_list: list[tuple[int, int]]) -> None:
-        for (i, (room_start, room_end)) in enumerate(room_list):
+            room_start = self.rom.read_int32(cursor)
+            room_end = self.rom.read_int32(cursor + 0x04)
+            # Handle the room file
             self.rooms.append(RoomDataRelocator(
                 self.rom, f'{self.name.replace("_scene", "_room")}_{i}', room_start, room_end))
+            cursor += 8
+        return DataRecord(self.rom, RecordType.RoomList, self.start, offset, cursor - rooms_start)
 
-    def iterate_path_list(self, path_list: list[tuple[int, int, int]]) -> None:
-        for (path_cursor, points_offset, points_count) in path_list:
+    def parse_path_list(self, offset: int) -> DataRecord:
+        paths_start = self.start + offset
+        cursor = paths_start
+        while True:
+            points_count = self.rom.read_byte(cursor)
+            points_segment = self.rom.read_byte(cursor + 0x04)
+            points_offset = self.rom.read_int24(cursor + 0x05)
+            if points_count == 0 or points_segment != 0x02 or points_offset == 0:
+                break
             points_length = align4(points_count * 6)
-            self.add_records(RecordType.Points, points_offset,
-                             points_length, path_cursor)
+            points_record = DataRecord(
+                self.rom, RecordType.Points, self.start, points_offset, points_length)
+            self.add_records(points_record, cursor)
+            cursor += 8
+        return DataRecord(self.rom, RecordType.PathList, self.start, offset, cursor - paths_start)
 
-    def parse_collision_header(self, offset: int) -> None:
+    def parse_collision_header(self, offset: int) -> DataRecord:
         # Vertices
-        collision_cursor = self.start + offset + 0x0C
-        vertices_count = self.rom.read_int16(collision_cursor)
-        vertices_offset = self.rom.read_int24(collision_cursor + 5)
+        cursor = self.start + offset + 0x0C
+        vertices_count = self.rom.read_int16(cursor)
+        vertices_offset = self.rom.read_int24(cursor + 5)
         vertices_length = align4(vertices_count * 6)
-        self.add_records(RecordType.Vertices, vertices_offset,
-                         vertices_length, collision_cursor)
+        vertices_record = DataRecord(
+            self.rom, RecordType.Vertices, self.start, vertices_offset, vertices_length)
+        self.add_records(vertices_record, cursor)
         # Polys
-        collision_cursor = self.start + offset + 0x14
-        polys_count = self.rom.read_int16(collision_cursor)
-        polys_offset = self.rom.read_int24(collision_cursor + 5)
+        cursor = self.start + offset + 0x14
+        polys_count = self.rom.read_int16(cursor)
+        polys_offset = self.rom.read_int24(cursor + 5)
         polys_length = polys_count * 16
-        self.add_records(RecordType.Polys, polys_offset,
-                         polys_length, collision_cursor)
+        polys_record = DataRecord(
+            self.rom, RecordType.Polys, self.start, polys_offset, polys_length)
+        self.add_records(polys_record, cursor)
         # Polytypes
-        collision_cursor = self.start + offset + 0x1C
-        polytypes_offset = self.rom.read_int24(collision_cursor + 1)
+        cursor = self.start + offset + 0x1C
+        polytypes_offset = self.rom.read_int24(cursor + 1)
         polytypes_length = -1
-        self.add_records(RecordType.Polytypes, polytypes_offset,
-                         polytypes_length, collision_cursor)
+        polytypes_record = DataRecord(
+            self.rom, RecordType.Polytypes, self.start, polytypes_offset, polytypes_length)
+        self.add_records(polytypes_record, cursor)
         # Cams
-        collision_cursor = self.start + offset + 0x20
-        cams_offset = self.rom.read_int24(collision_cursor + 1)
+        cursor = self.start + offset + 0x20
+        cams_offset = self.rom.read_int24(cursor + 1)
         cams_length = -1
         if cams_offset != 0:
-            self.add_records(RecordType.Cams, cams_offset,
-                             cams_length, collision_cursor)
+            cams_record = DataRecord(
+                self.rom, RecordType.Cams, self.start, cams_offset, cams_length)
+            self.add_records(cams_record, cursor)
         # Waterboxes
-        collision_cursor = self.start + offset + 0x24
-        waterboxes_count = self.rom.read_int16(collision_cursor)
-        waterboxes_offset = self.rom.read_int24(collision_cursor + 5)
+        cursor = self.start + offset + 0x24
+        waterboxes_count = self.rom.read_int16(cursor)
+        waterboxes_offset = self.rom.read_int24(cursor + 5)
         waterboxes_length = waterboxes_count * 16
         if waterboxes_count != 0 and waterboxes_offset != 0:
-            self.add_records(RecordType.Waterboxes, waterboxes_offset,
-                             waterboxes_length, collision_cursor)
+            waterboxes_record = DataRecord(
+                self.rom, RecordType.Waterboxes, self.start, waterboxes_offset, waterboxes_length)
+            self.add_records(waterboxes_record, cursor)
+        # Return data record for the collision header
+        return DataRecord(self.rom, RecordType.CollisionHeader, self.start, offset, 0x2C)
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -1104,79 +1084,69 @@ class RoomDataRelocator(FileDataRelocator):
 
     def parse_file_header(self, alternate: Optional[int] = None) -> DataRecord:
         room_start: int = alternate if alternate is not None else self.start
-        room_cursor: int = room_start
-        alternate_headers: list[int] = []
-        mesh_header: tuple[int, int] = 0
+        cursor: int = room_start
         while True:
-            command = self.rom.read_byte(room_cursor)
-            count = self.rom.read_byte(room_cursor + 1)
-            offset = self.rom.read_int24(room_cursor + 5)
+            command = self.rom.read_byte(cursor)
+            count = self.rom.read_byte(cursor + 0x01)
+            offset = self.rom.read_int24(cursor + 0x05)
             if command == 0x18:  # AlternateHeaders
-                alternate_headers = self.get_alternate_headers(offset)
-                record_type = RecordType.AlternateHeaders
-                length = len(alternate_headers) * 4
+                record = self.parse_alternate_headers(offset)
             elif command == 0x0A:  # RoomMesh
-                mesh_type = self.rom.read_byte(self.start + offset)
-                mesh_header = (offset, mesh_type)
-                record_type = RecordType.RoomMesh
-                length = 0x10 if mesh_type == 1 else 0x0C
+                record = self.parse_room_mesh(offset)
             elif command == 0x0B:  # ObjectList
-                record_type = RecordType.ObjectList
-                length = count * 2
+                record = DataRecord(self.rom, RecordType.ObjectList,
+                                    self.start, offset, count * 2)
             elif command == 0x01:  # ActorList
-                record_type = RecordType.ActorList
-                length = count * 16
+                record = DataRecord(self.rom, RecordType.ActorList,
+                                    self.start, offset, count * 16)
             elif command == 0x14:  # Terminator
-                room_cursor += 8
+                cursor += 8
                 break
             else:  # Commands without pointers to data
-                room_cursor += 8
+                cursor += 8
                 continue
-            self.add_records(record_type, offset, length, room_cursor)
-            room_cursor += 8
-        # Iterate alternate headers just for the main room header
-        if alternate is None:
-            self.parse_mesh_header(mesh_header)
-            self.iterate_alternate_headers(alternate_headers)
-        # Return data record for the scene header
-        return DataRecord(self.rom, RecordType.RoomHeader, self.start, room_start - self.start, room_cursor - room_start)
+            self.add_records(record, cursor)
+            cursor += 8
+        # Return data record for the room header
+        return DataRecord(self.rom, RecordType.RoomHeader, self.start, room_start - self.start, cursor - room_start)
 
-    def parse_mesh_header(self, mesh_header: tuple[int, int]) -> None:
+    def parse_room_mesh(self, mesh_header: tuple[int, int]) -> None:
         (offset, mesh_type) = mesh_header
         if mesh_type == 1:  # type 1
-            header_cursor = self.start + offset + 0x01
-            format = self.rom.read_byte(header_cursor)
-            header_cursor = self.start + offset + 0x04
-            dlists_offset = self.rom.read_int24(header_cursor)
-            # TODO.Sly: add_records takes DataRecord and cursor???
-            self.add_records(RecordType.DlistEntries,
-                             dlists_offset, entries_count * 8, header_cursor)
-            self.parse_dlist_entries(dlists_offset)
+            mesh_cursor = self.start + offset + 0x01
+            format = self.rom.read_byte(mesh_cursor)
+            mesh_cursor = self.start + offset + 0x04
+            dlists_offset = self.rom.read_int24(mesh_cursor)
+            dlists_record = self.parse_dlist_entries(dlists_offset)
+            self.add_records(dlists_record, mesh_cursor)
             if format == 0x01:  # single
                 self.parse_background_entry(offset + 0x04)
             else:  # multi
-                header_cursor = self.start + offset + 0x08
-                entries_count = self.rom.read_byte(header_cursor)
-                header_cursor = self.start + offset + 0x0C
-                backgrounds_offset = self.rom.read_int24(header_cursor)
-                self.add_records(record_type, backgrounds_offset,
-                                 entries_count * 28, header_cursor)
+                mesh_cursor = self.start + offset + 0x08
+                entries_count = self.rom.read_byte(mesh_cursor)
+                mesh_cursor = self.start + offset + 0x0C
+                backgrounds_offset = self.rom.read_int24(mesh_cursor)
+                backgrounds_record = self.parse_background_entries(
+                    backgrounds_offset, entries_count)
+                self.add_records(backgrounds_record, mesh_cursor)
+                # self.add_records(record_type, backgrounds_offset,
+                #                  entries_count * 28, mesh_cursor)
                 for i in range(entries_count):
                     self.parse_background_entry(backgrounds_offset + (i * 28))
         else:  # type 0 or 2
-            header_cursor = self.start + offset + 0x01
-            entries_count = self.rom.read_byte(header_cursor)
-            record_type = RecordType.DlistEntries if mesh_type == 0 else RecordType.CullableEntries
-            header_cursor = self.start + offset + 0x04
-            entries_offset = self.rom.read_int24(header_cursor)
-            self.add_records(record_type, entries_offset,
-                             entries_count * 8, header_cursor)
-            header_cursor = self.start + offset + 0x08
-            entries_offset = self.rom.read_int24(header_cursor)
-            dlists_record = self.parse_dlist_entries(
-                entries_offset, entries_count)
-            self.add_records(dlists_record.type, dlists_record.offset,
-                             dlists_record.length, header_cursor)
+            mesh_cursor = self.start + offset + 0x01
+            entries_count = self.rom.read_byte(mesh_cursor)
+            mesh_cursor = self.start + offset + 0x04
+            entries_offset = self.rom.read_int24(mesh_cursor)
+            entries_record = self.parse_dlist_entries(
+                entries_offset, entries_count) if mesh_type == 0 else self.parse_cullable_entries(
+                    entries_offset, entries_count)
+            self.add_records(entries_record, mesh_cursor)
+            mesh_cursor = self.start + offset + 0x08
+            entries_offset = self.rom.read_int24(mesh_cursor)
+            dlists_record = DataRecord(self.rom, RecordType.DlistEntries if mesh_type == 0 else RecordType.CullableEntries,
+                                       self.start, entries_offset, 0)
+            self.add_records(dlists_record, mesh_cursor)
 
     def parse_dlist_entries(self, offset: int, count: int = maxsize) -> DataRecord:
         dlists_start = self.start + offset
@@ -1186,8 +1156,7 @@ class RoomDataRelocator(FileDataRelocator):
             if dlist_offset == 0:
                 break
             dlist_record = self.parse_dlist(dlist_offset)
-            self.add_records(dlist_record.type, dlist_record.offset,
-                             dlist_record.length, cursor)
+            self.add_records(dlist_record, cursor)
             cursor += 4
         return DataRecord(self.rom, RecordType.DlistEntries, self.start, offset, cursor - dlists_start)
 
@@ -1202,33 +1171,34 @@ class RoomDataRelocator(FileDataRelocator):
                 break
         return DataRecord(self.rom, RecordType.Dlist, self.start, offset, cursor - dlist_start)
 
-    def parse_background_entries(self, offset: int) -> DataRecord:
-        header_cursor = self.start + offset + 0x04
-        source_offset = self.rom.read_int24(header_cursor)
-        self.add_records(RecordType.BackgroundSource,
-                         source_offset, -1, header_cursor)  # TODO.Sly size
-        header_cursor = self.start + offset + 0x0C
-        tlut_offset = self.rom.read_int24(header_cursor)
+    def parse_background_entries(self, offset: int, count: int) -> DataRecord:
+        entry_start = self.start + offset
+        cursor = entry_start
+        for _ in range(count):
+            entry_record = self.parse_background_entry(cursor - self.start)
+            self.add_records(entry_record, cursor)
+            cursor += 0x1C
+        return DataRecord(self.rom, RecordType.BackgroundEntries, self.start, offset, cursor - entry_start)
+
+    def parse_background_entry(self, offset: int) -> DataRecord:
+        cursor = self.start + offset + 0x04
+        source_offset = self.rom.read_int24(cursor)
+        source_record = self.parse_background_source(source_offset)
+        self.add_records(source_record, cursor)
+        # self.add_records(RecordType.BackgroundSource,
+        #                  source_offset, -1, cursor)  # TODO.Sly size
+        cursor = self.start + offset + 0x0C
+        tlut_offset = self.rom.read_int24(cursor)
         if tlut_offset != 0:
-            self.add_records(RecordType.BackgroundTlut,
-                             tlut_offset, -1, header_cursor)  # TODO.Sly size
+            tlut_record = self.parse_background_tlut(tlut_offset)
+            self.add_records(tlut_record, cursor)
+            # self.add_records(RecordType.BackgroundTlut,
+            #                  tlut_offset, -1, cursor)  # TODO.Sly size
+        return DataRecord(self.rom, RecordType.Background, self.start, offset, 0x1C)
 
-    def parse_background_entry(self, offset: int) -> None:
-        header_cursor = self.start + offset + 0x04
-        source_offset = self.rom.read_int24(header_cursor)
-        self.add_records(RecordType.BackgroundSource,
-                         source_offset, -1, header_cursor)  # TODO.Sly size
-        header_cursor = self.start + offset + 0x0C
-        tlut_offset = self.rom.read_int24(header_cursor)
-        if tlut_offset != 0:
-            self.add_records(RecordType.BackgroundTlut,
-                             tlut_offset, -1, header_cursor)  # TODO.Sly size
-
-    def parse_background_entries(self, offset: int, count: int) -> None:
-        print()
-
-    def parse_cullable_entries(self, offset: int, count: int) -> None:
-        print()
+    def parse_cullable_entries(self, offset: int, count: int) -> DataRecord:
+        cursor = self.start + offset + 0x01
+        source_offset = self.rom.read_int24(cursor)
 
 
 def fully_mix_skulls(rom: Rom):
