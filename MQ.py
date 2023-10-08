@@ -786,13 +786,16 @@ class RecordType(str, Enum):
     # Mesh header record types
     MeshHeader = 'MeshHeader'
     DlistEntries = 'DlistEntries'
+    DlistEntry = 'DlistEntry'
     Dlist = 'Dlist'
     Vtx = 'Vtx'
-    BackgroundEntries = 'BackgroundEntries'
+    Backgrounds = 'Backgrounds'
     Background = 'Background'
     BackgroundSource = 'BackgroundSource'
     BackgroundTlut = 'BackgroundTlut'
     CullableEntries = 'CullableEntries'
+    CullableEntry = 'CullableEntry'
+    Cullable = 'Cullable'
 
     # Data at the end of the file not referenced by a header
     Unreferenced = 'Unreferenced'
@@ -890,7 +893,7 @@ class FileDataRelocator(ABC):
             if header_offset == 0:
                 cursor += 4
                 continue
-            elif header_segment != 0x02:
+            elif header_segment not in (0x02, 0x03):
                 break
             # Parse file header
             record = self.parse_file_header(self.start + header_offset)
@@ -1094,11 +1097,11 @@ class RoomDataRelocator(FileDataRelocator):
             elif command == 0x0A:  # RoomMesh
                 record = self.parse_room_mesh(offset)
             elif command == 0x0B:  # ObjectList
-                record = DataRecord(self.rom, RecordType.ObjectList,
-                                    self.start, offset, count * 2)
+                record = DataRecord(
+                    self.rom, RecordType.ObjectList, self.start, offset, count * 2)
             elif command == 0x01:  # ActorList
-                record = DataRecord(self.rom, RecordType.ActorList,
-                                    self.start, offset, count * 16)
+                record = DataRecord(
+                    self.rom, RecordType.ActorList, self.start, offset, count * 16)
             elif command == 0x14:  # Terminator
                 cursor += 8
                 break
@@ -1110,55 +1113,59 @@ class RoomDataRelocator(FileDataRelocator):
         # Return data record for the room header
         return DataRecord(self.rom, RecordType.RoomHeader, self.start, room_start - self.start, cursor - room_start)
 
-    def parse_room_mesh(self, mesh_header: tuple[int, int]) -> None:
-        (offset, mesh_type) = mesh_header
-        if mesh_type == 1:  # type 1
-            mesh_cursor = self.start + offset + 0x01
-            format = self.rom.read_byte(mesh_cursor)
-            mesh_cursor = self.start + offset + 0x04
-            dlists_offset = self.rom.read_int24(mesh_cursor)
-            dlists_record = self.parse_dlist_entries(dlists_offset)
-            self.add_records(dlists_record, mesh_cursor)
-            if format == 0x01:  # single
-                self.parse_background_entry(offset + 0x04)
+    def parse_room_mesh(self, offset: int) -> DataRecord:
+        mesh_start = self.start + offset
+        cursor = mesh_start
+        mesh_type = self.rom.read_byte(cursor)
+        if mesh_type == 1:  # image
+            mesh_format = self.rom.read_byte(cursor + 0x01)
+            dlist_entry_offset = self.rom.read_int24(cursor + 0x05)
+            dlist_entry_record = self.parse_dlist_entry(dlist_entry_offset)
+            self.add_records(dlist_entry_record, cursor + 0x04)
+            if mesh_format == 0x01:  # single
+                # single 0x08-0x20 matches background entry 0x04-0x1C
+                self.parse_background(cursor - self.start + 0x04)
+                cursor += 0x20
             else:  # multi
-                mesh_cursor = self.start + offset + 0x08
-                entries_count = self.rom.read_byte(mesh_cursor)
-                mesh_cursor = self.start + offset + 0x0C
-                backgrounds_offset = self.rom.read_int24(mesh_cursor)
-                backgrounds_record = self.parse_background_entries(
-                    backgrounds_offset, entries_count)
-                self.add_records(backgrounds_record, mesh_cursor)
-                # self.add_records(record_type, backgrounds_offset,
-                #                  entries_count * 28, mesh_cursor)
-                for i in range(entries_count):
-                    self.parse_background_entry(backgrounds_offset + (i * 28))
-        else:  # type 0 or 2
-            mesh_cursor = self.start + offset + 0x01
-            entries_count = self.rom.read_byte(mesh_cursor)
-            mesh_cursor = self.start + offset + 0x04
-            entries_offset = self.rom.read_int24(mesh_cursor)
-            entries_record = self.parse_dlist_entries(
-                entries_offset, entries_count) if mesh_type == 0 else self.parse_cullable_entries(
-                    entries_offset, entries_count)
-            self.add_records(entries_record, mesh_cursor)
-            mesh_cursor = self.start + offset + 0x08
-            entries_offset = self.rom.read_int24(mesh_cursor)
-            dlists_record = DataRecord(self.rom, RecordType.DlistEntries if mesh_type == 0 else RecordType.CullableEntries,
-                                       self.start, entries_offset, 0)
-            self.add_records(dlists_record, mesh_cursor)
+                count = self.rom.read_byte(cursor + 0x08)
+                backgrounds_offset = self.rom.read_int24(cursor + 0x0D)
+                backgrounds_record = self.parse_backgrounds(
+                    backgrounds_offset, count)
+                self.add_records(backgrounds_record, cursor + 0x0C)
+                cursor += 0x10
+        else:  # normal or cullable
+            count = self.rom.read_byte(cursor + 0x01)
+            start_offset = self.rom.read_int24(cursor + 0x05)
+            start_record = self.parse_dlist_entries(
+                start_offset, count) if mesh_type == 0 else self.parse_cullable_entries(start_offset, count)
+            self.add_records(start_record, cursor + 0x04)
+            end_offset = self.rom.read_int24(cursor + 0x09)
+            end_type = RecordType.DlistEntry if mesh_type == 0 else RecordType.CullableEntries
+            end_record = DataRecord(
+                self.rom, end_type, self.start, end_offset, 0)
+            self.add_records(end_record, cursor + 0x08)
+            cursor += 0x0C
+        return DataRecord(self.rom, RecordType.RoomMesh, self.start, offset, cursor - mesh_start)
 
-    def parse_dlist_entries(self, offset: int, count: int = maxsize) -> DataRecord:
-        dlists_start = self.start + offset
-        cursor = dlists_start
+    def parse_dlist_entries(self, offset: int, count: int) -> DataRecord:
+        dlist_entries_start = self.start + offset
+        cursor = dlist_entries_start
         for _ in range(count):
-            dlist_offset = self.rom.read_int32(cursor)
-            if dlist_offset == 0:
-                break
-            dlist_record = self.parse_dlist(dlist_offset)
-            self.add_records(dlist_record, cursor)
-            cursor += 4
-        return DataRecord(self.rom, RecordType.DlistEntries, self.start, offset, cursor - dlists_start)
+            dlist_entry_record = self.parse_dlist_entry(cursor - self.start)
+            self.add_records(dlist_entry_record, cursor)
+            cursor += 0x08
+        return DataRecord(self.rom, RecordType.DlistEntries, self.start, offset, cursor - dlist_entries_start)
+
+    def parse_dlist_entry(self, offset: int) -> DataRecord:
+        dlist_entry_start = self.start + offset
+        cursor = dlist_entry_start
+        opa_offset = self.rom.read_int24(cursor + 0x01)
+        opa_record = self.parse_dlist(opa_offset)
+        self.add_records(opa_record, cursor)
+        xlu_offset = self.rom.read_int24(cursor + 0x05)
+        xlu_record = self.parse_dlist(xlu_offset)
+        self.add_records(xlu_record, cursor + 0x04)
+        return DataRecord(self.rom, RecordType.DlistEntry, self.start, offset, 0x08)
 
     def parse_dlist(self, offset: int) -> DataRecord:
         dlist_start = self.start + offset
@@ -1166,39 +1173,54 @@ class RoomDataRelocator(FileDataRelocator):
         while True:
             # TODO.Sly: Vtx and other types?
             op = self.rom.read_int32(cursor)
-            cursor += 8
+            cursor += 0x08
             if op == 0xDE000000:
                 break
         return DataRecord(self.rom, RecordType.Dlist, self.start, offset, cursor - dlist_start)
 
-    def parse_background_entries(self, offset: int, count: int) -> DataRecord:
-        entry_start = self.start + offset
-        cursor = entry_start
+    def parse_backgrounds(self, offset: int, count: int) -> DataRecord:
+        backgrounds_start = self.start + offset
+        cursor = backgrounds_start
         for _ in range(count):
-            entry_record = self.parse_background_entry(cursor - self.start)
-            self.add_records(entry_record, cursor)
+            background_record = self.parse_background(cursor - self.start)
+            self.add_records(background_record, cursor)
             cursor += 0x1C
-        return DataRecord(self.rom, RecordType.BackgroundEntries, self.start, offset, cursor - entry_start)
+        return DataRecord(self.rom, RecordType.Backgrounds, self.start, offset, cursor - backgrounds_start)
 
-    def parse_background_entry(self, offset: int) -> DataRecord:
-        cursor = self.start + offset + 0x04
-        source_offset = self.rom.read_int24(cursor)
-        source_record = self.parse_background_source(source_offset)
+    def parse_background(self, offset: int) -> DataRecord:
+        background_start = self.start + offset
+        cursor = background_start
+        source_offset = self.rom.read_int24(cursor + 0x05)
+        source_record = DataRecord(
+            self.rom, RecordType.BackgroundSource, self.start, source_offset, -1)  # TODO.Sly size
         self.add_records(source_record, cursor)
-        # self.add_records(RecordType.BackgroundSource,
-        #                  source_offset, -1, cursor)  # TODO.Sly size
-        cursor = self.start + offset + 0x0C
-        tlut_offset = self.rom.read_int24(cursor)
-        if tlut_offset != 0:
-            tlut_record = self.parse_background_tlut(tlut_offset)
+        tlut_segment = self.rom.read_byte(cursor + 0x0C)
+        tlut_offset = self.rom.read_int24(cursor + 0x0D)
+        if tlut_segment != 0 and tlut_offset != 0:
+            tlut_record = DataRecord(
+                self.rom, RecordType.BackgroundTlut, self.start, tlut_offset, -1)  # TODO.Sly size
             self.add_records(tlut_record, cursor)
-            # self.add_records(RecordType.BackgroundTlut,
-            #                  tlut_offset, -1, cursor)  # TODO.Sly size
         return DataRecord(self.rom, RecordType.Background, self.start, offset, 0x1C)
 
     def parse_cullable_entries(self, offset: int, count: int) -> DataRecord:
-        cursor = self.start + offset + 0x01
-        source_offset = self.rom.read_int24(cursor)
+        cullable_entries_start = self.start + offset
+        cursor = cullable_entries_start
+        for _ in range(count):
+            cullable_entry_record = self.parse_cullable_entry(cursor - self.start)
+            self.add_records(cullable_entry_record, cursor)
+            cursor += 0x10
+        return DataRecord(self.rom, RecordType.DlistEntries, self.start, offset, cursor - cullable_entries_start)
+
+    def parse_cullable_entry(self, offset: int) -> DataRecord:
+        cullable_entry_start = self.start + offset
+        cursor = cullable_entry_start
+        opa_offset = self.rom.read_int24(cursor + 0x09)
+        opa_record = self.parse_dlist(opa_offset)
+        self.add_records(opa_record, cursor)
+        xlu_offset = self.rom.read_int24(cursor + 0x0D)
+        xlu_record = self.parse_dlist(xlu_offset)
+        self.add_records(xlu_record, cursor + 0x04)
+        return DataRecord(self.rom, RecordType.CullableEntry, self.start, offset, 0x10)
 
 
 def fully_mix_skulls(rom: Rom):
