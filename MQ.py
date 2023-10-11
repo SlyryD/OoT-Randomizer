@@ -811,6 +811,14 @@ class DataRecord:
 
         self.data: bytearray = self.rom.read_bytes(start + offset, length)
 
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, DataRecord):
+            return NotImplemented
+        return self.type == other.type and self.offset == other.offset and self.length == other.length
+
+    def __hash__(self) -> int:
+        return hash((self.type, self.offset, self.length))
+
     def to_json(self) -> dict[str, Any]:
         return {
             'type': self.type.value,
@@ -826,6 +834,14 @@ class PointerRecord:
         self.start: int = start
         self.offset: int = offset
         self.record: DataRecord = record
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, PointerRecord):
+            return NotImplemented
+        return self.type == other.type and self.offset == other.offset and self.record == other.record
+
+    def __hash__(self) -> int:
+        return hash((self.type, self.offset, self.record))
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -866,23 +882,27 @@ class FileDataRelocator(ABC):
         return NotImplemented
 
     def add_records(self, data_record: DataRecord, cursor: int) -> None:
-        # Get existing data record or create a new one
+        # Get existing data record or append a new one
         existing_data_record: Optional[DataRecord] = next(
             (x for x in self.data_records if x.offset == data_record.offset), None)
         if existing_data_record is not None:
-            if existing_data_record.type != data_record.type:
+            if existing_data_record != data_record:
                 raise Exception(
-                    f'Existing data record type {existing_data_record.type} does not match new type {data_record.type}')
-            if existing_data_record.length != data_record.length:
-                raise Exception(
-                    f'Existing data record length {existing_data_record.length} does not match new length {data_record.length}')
+                    f'Existing {self.name} {existing_data_record.type} data record at 0x{existing_data_record.offset:08X} does not match new {data_record.type} data record at 0x{data_record.offset:08X}')
             data_record = existing_data_record
         else:
             self.data_records.append(data_record)
-        # Add pointer record for data record
+        # Get existing pointer record or append a new one
         pointer_record = PointerRecord(
             self.rom, data_record.type, self.start, cursor - self.start, data_record)
-        self.pointer_records.append(pointer_record)
+        existing_pointer_record: Optional[PointerRecord] = next(
+            (x for x in self.pointer_records if x.offset == pointer_record.offset), None)
+        if existing_pointer_record is not None:
+            if existing_pointer_record != pointer_record:
+                raise Exception(
+                    f'Existing {self.name} {existing_pointer_record.type} pointer record at 0x{existing_pointer_record.offset:08X} does not match new {pointer_record.type} pointer record at 0x{pointer_record.offset:08X}')
+        else:
+            self.pointer_records.append(pointer_record)
 
     def parse_alternate_headers(self, offset: int) -> DataRecord:
         alternate_start = self.start + offset
@@ -912,7 +932,7 @@ class FileDataRelocator(ABC):
             next_record = self.data_records[i + 1]
             if record.offset + record.length > next_record.offset:
                 raise Exception(
-                    f'Overlapping records: {record.type.value} at offset {record.offset} and {next_record.type.value} at offset {next_record.offset}')
+                    f'Overlapping records: {record.type.value} at offset 0x{record.offset:08X} and {next_record.type.value} at offset 0x{next_record.offset:08X}')
 
     def add_unreferenced_record(self) -> None:
         last_record = self.data_records[-1]
@@ -1151,20 +1171,24 @@ class RoomDataRelocator(FileDataRelocator):
         dlist_entries_start = self.start + offset
         cursor = dlist_entries_start
         for _ in range(count):
-            dlist_entry_record = self.parse_dlist_entry(cursor - self.start)
-            self.add_records(dlist_entry_record, cursor)
+            # Do not add individual dlist entry records since they should be contiguous
+            self.parse_dlist_entry(cursor - self.start)
             cursor += 0x08
         return DataRecord(self.rom, RecordType.DlistEntries, self.start, offset, cursor - dlist_entries_start)
 
     def parse_dlist_entry(self, offset: int) -> DataRecord:
         dlist_entry_start = self.start + offset
         cursor = dlist_entry_start
+        opa_segment = self.rom.read_byte(cursor)
         opa_offset = self.rom.read_int24(cursor + 0x01)
-        opa_record = self.parse_dlist(opa_offset)
-        self.add_records(opa_record, cursor)
+        if (opa_segment != 0 and opa_offset != 0):
+            opa_record = self.parse_dlist(opa_offset)
+            self.add_records(opa_record, cursor)
+        xlu_segment = self.rom.read_byte(cursor + 0x04)
         xlu_offset = self.rom.read_int24(cursor + 0x05)
-        xlu_record = self.parse_dlist(xlu_offset)
-        self.add_records(xlu_record, cursor + 0x04)
+        if (xlu_segment != 0 and xlu_offset != 0):
+            xlu_record = self.parse_dlist(xlu_offset)
+            self.add_records(xlu_record, cursor + 0x04)
         return DataRecord(self.rom, RecordType.DlistEntry, self.start, offset, 0x08)
 
     def parse_dlist(self, offset: int) -> DataRecord:
@@ -1172,11 +1196,31 @@ class RoomDataRelocator(FileDataRelocator):
         cursor = dlist_start
         while True:
             # TODO.Sly: Vtx and other types?
-            op = self.rom.read_int32(cursor)
+            op = self.rom.read_byte(cursor)
+            if op == 0x01:  # G_VTX
+                vtx_count = self.rom.read_int24(cursor + 0x01) >> 12
+                vtx_offset = self.rom.read_int24(cursor + 0x05)
+                vtx_record = self.parse_vtx(vtx_offset, vtx_count)
+                self.add_records(vtx_record, cursor + 0x04)
+            elif op == 0x04:  # G_BRANCH_Z
+                # TODO.Sly
+                pass
+            elif op == 0xDA:  # G_MTX
+                # TODO.Sly: Only parse if segment 0x03
+                pass
+            elif op == 0xDE:  # G_DL
+                # TODO.Sly
+                pass
+            elif op == 0xFD:  # G_SETTIMG
+                # TODO.Sly
+                pass
             cursor += 0x08
-            if op == 0xDE000000:
+            if op == 0xDF:  # G_ENDDL
                 break
         return DataRecord(self.rom, RecordType.Dlist, self.start, offset, cursor - dlist_start)
+
+    def parse_vtx(self, offset: int, count: int) -> DataRecord:
+        return DataRecord(self.rom, RecordType.Vtx, self.start, offset, count * 0x10)
 
     def parse_backgrounds(self, offset: int, count: int) -> DataRecord:
         backgrounds_start = self.start + offset
@@ -1206,20 +1250,14 @@ class RoomDataRelocator(FileDataRelocator):
         cullable_entries_start = self.start + offset
         cursor = cullable_entries_start
         for _ in range(count):
-            cullable_entry_record = self.parse_cullable_entry(cursor - self.start)
-            self.add_records(cullable_entry_record, cursor)
+            # Do not add individual cullable entry records since they should be contiguous
+            self.parse_cullable_entry(cursor - self.start)
             cursor += 0x10
-        return DataRecord(self.rom, RecordType.DlistEntries, self.start, offset, cursor - cullable_entries_start)
+        return DataRecord(self.rom, RecordType.CullableEntries, self.start, offset, cursor - cullable_entries_start)
 
     def parse_cullable_entry(self, offset: int) -> DataRecord:
-        cullable_entry_start = self.start + offset
-        cursor = cullable_entry_start
-        opa_offset = self.rom.read_int24(cursor + 0x09)
-        opa_record = self.parse_dlist(opa_offset)
-        self.add_records(opa_record, cursor)
-        xlu_offset = self.rom.read_int24(cursor + 0x0D)
-        xlu_record = self.parse_dlist(xlu_offset)
-        self.add_records(xlu_record, cursor + 0x04)
+        # CullableEntry 0x08-0x10 matches DlistEntry 0x00-0x08
+        self.parse_dlist_entry(offset + 0x08)
         return DataRecord(self.rom, RecordType.CullableEntry, self.start, offset, 0x10)
 
 
