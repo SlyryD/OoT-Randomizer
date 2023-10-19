@@ -54,8 +54,8 @@ class RecordType(str, Enum):
     CullableEntry = 'CullableEntry'
     Cullable = 'Cullable'
 
-    # Data at the end of the file not referenced by a header
-    Unreferenced = 'Unreferenced'
+    # Unknown data not referenced in scene and room files
+    Unknown = 'Unknown'
 
 
 class DataRecord:
@@ -117,7 +117,7 @@ class PointerRecord:
         }
 
 
-T = TypeVar("T", DataRecord, PointerRecord)
+T = TypeVar('T', DataRecord, PointerRecord)
 
 
 class FileDataRelocator(ABC):
@@ -140,11 +140,14 @@ class FileDataRelocator(ABC):
         # Check for overlapping records
         self.check_for_overlapping_records()
 
-        # Add unreferenced data record from last referenced data record to end of file
-        self.add_unreferenced_records()
+        # Add unknown data record from last referenced data record to end of file
+        self.add_unknown_record_at_file_end()
 
         # Fix missing lengths
         self.fix_missing_lengths()
+
+        # Add unknown data records between sorted records
+        self.add_unknown_records()
 
     @abstractmethod
     def parse_file_header(self, alternate: Optional[int] = None) -> DataRecord:
@@ -178,46 +181,52 @@ class FileDataRelocator(ABC):
                     raise Exception(
                         f'Overlapping records: {record.type.value} at offset 0x{record.offset:08X} and {next_record.type.value} at offset 0x{next_record.offset:08X}')
 
-    # Add unreferenced records between sorted records
-    def add_unreferenced_records(self) -> None:
-        # TODO.Sly: Add these
-        # # Iterate pairs of data records
-        # original_length  = len(self.data_records)
-        # for i in range(original_length - 1):
-        #     record = self.data_records[i]
-        #     next_record = self.data_records[i + 1]
-        #     record_end = record.offset + record.length
-        #     if record_end != next_record.offset:
-        #         data_record = DataRecord(self.rom, RecordType.Unreferenced,
-        #                                  self.start, record_end, next_record.offset - record_end)
-        #         self.data_records.append(data_record)
-
+    # Add unknown record at file end
+    def add_unknown_record_at_file_end(self) -> None:
+        # Handle data at the end of the file
         last_record = self.data_records[-1]
         if last_record.length == -1:
-            # Cannot determine length of last record
-            data_record = DataRecord(self.rom, RecordType.Unreferenced,
-                                     self.start, last_record.offset, self.end - last_record.offset)
+            last_record_end_offset = last_record.offset
+            last_record_end = self.start + last_record_end_offset
+            data_record = DataRecord(self.rom, RecordType.Unknown, self.start,
+                                     last_record_end_offset, self.end - last_record_end)
             self.data_records.pop()
             self.data_records.append(data_record)
         else:
-            data_record = DataRecord(self.rom, RecordType.Unreferenced, self.start, last_record.offset +
-                                     last_record.length, self.end - (last_record.offset + last_record.length))
+            last_record_end_offset = last_record.offset + last_record.length
+            last_record_end = self.start + last_record_end_offset
+            data_record = DataRecord(self.rom, RecordType.Unknown, self.start,
+                                     last_record_end_offset, self.end - last_record_end)
             self.data_records.append(data_record)
 
     def fix_missing_lengths(self) -> None:
         # Iterate data records in reverse in case we have multiple missing lengths in a row
         index: int = len(self.data_records) - 1
-        if self.data_records[index].type != RecordType.Unreferenced:
+        if self.data_records[index].type != RecordType.Unknown:
             raise Exception(
-                "Expected unreferenced record at the end of the scene file")
+                'Expected unknown record at the end of the scene file')
         if self.data_records[index].length == -1:
-            raise Exception("Cannot determine length of last record")
+            raise Exception('Cannot determine length of last record')
         index -= 1
         while index >= 0:
             record = self.data_records[index]
             next_record = self.data_records[index + 1]
             if record.length == -1:
                 record.length = next_record.offset - record.offset
+            index -= 1
+
+    # Add unknown records between sorted records
+    def add_unknown_records(self) -> None:
+        # Handle data between records
+        index: int = len(self.data_records) - 1
+        while index > 0:
+            record = self.data_records[index]
+            previous_record = self.data_records[index - 1]
+            previous_record_end = previous_record.offset + previous_record.length
+            if record.offset > previous_record_end:
+                data_record = DataRecord(self.rom, RecordType.Unknown, self.start,
+                                         previous_record_end, record.offset - previous_record_end)
+                self.data_records.insert(index, data_record)
             index -= 1
 
     # Add data record to the given file and pointer record to this file
@@ -588,7 +597,7 @@ class RoomDataRelocator(FileDataRelocator):
                 record = file.parse_room_mesh(offset)
             elif command == 0x0B:  # ObjectList
                 record = DataRecord(
-                    self.rom, RecordType.ObjectList, file.start, offset, count * 0x02)
+                    self.rom, RecordType.ObjectList, file.start, offset, align4(count * 0x02))
             elif command == 0x01:  # ActorList
                 record = DataRecord(
                     self.rom, RecordType.ActorList, file.start, offset, count * 0x10)
@@ -612,9 +621,9 @@ class RoomDataRelocator(FileDataRelocator):
         return (-1, None)  # unknown
 
 
-# rom = Rom("ZOOTDEC.z64")
+# rom = Rom('ZOOTDEC.z64')
 # fully_mix_skulls(rom)
-rom = Rom("zeloot_mqdebug.z64")
+rom = Rom('zeloot_mqdebug.z64')
 
 scene_data_relocator = SceneDataRelocator(
     rom, 'spot00_scene', 0x01FB8000, 0x01FE2220)
