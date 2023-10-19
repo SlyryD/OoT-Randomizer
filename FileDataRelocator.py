@@ -6,6 +6,7 @@ from typing import Any, Optional, TypeVar
 
 from MQ import align4
 from Rom import Rom
+from Utils import data_path
 
 
 class RecordType(str, Enum):
@@ -315,6 +316,7 @@ class FileDataRelocator(ABC):
             self.rom, RecordType.Polytypes, polytypes_file.start, polytypes_offset, polytypes_length)
         self.add_records(polytypes_file, polytypes_record, cursor)
         # Cams
+        # TODO.Sly: Cam Pos Data
         cursor = self.start + offset + 0x20
         (cams_offset, cams_file) = self.get_offset(cursor)
         cams_length = -1
@@ -442,8 +444,8 @@ class FileDataRelocator(ABC):
         backgrounds_start = self.start + offset
         cursor = backgrounds_start
         for _ in range(count):
-            background_record = self.parse_background(cursor - self.start)
-            self.add_records(self, background_record, cursor)
+            # Do not add individual background as a record since backgrounds should stay contiguous
+            self.parse_background(cursor - self.start)
             cursor += 0x1C
         return DataRecord(self.rom, RecordType.Backgrounds, self.start, offset, cursor - backgrounds_start)
 
@@ -454,12 +456,12 @@ class FileDataRelocator(ABC):
         self.expect_file_at_cursor(source_file, cursor + 0x04)
         source_record = DataRecord(
             self.rom, RecordType.BackgroundSource, source_file.start, source_offset, -1)  # TODO.Sly size
-        self.add_records(source_file, source_record, cursor)
+        self.add_records(source_file, source_record, cursor + 0x04)
         (tlut_offset, tlut_file) = self.get_offset(cursor + 0x0C)
         if tlut_file is not None:
             tlut_record = DataRecord(
                 self.rom, RecordType.BackgroundTlut, tlut_file.start, tlut_offset, -1)  # TODO.Sly size
-            self.add_records(tlut_file, tlut_record, cursor)
+            self.add_records(tlut_file, tlut_record, cursor + 0x0C)
         return DataRecord(self.rom, RecordType.Background, self.start, offset, 0x1C)
 
     def parse_cullable_entries(self, offset: int, count: int) -> DataRecord:
@@ -626,7 +628,9 @@ class RoomDataRelocator(FileDataRelocator):
 rom = Rom('zeloot_mqdebug.z64')
 
 scene_data_relocator = SceneDataRelocator(
-    rom, 'spot00_scene', 0x01FB8000, 0x01FE2220)
+    rom, 'market_alley_n_scene', 0x02A28000, 0x02A292F0)
+# rom, 'spot00_scene', 0x01FB8000, 0x01FE2220)
 # rom, 'ddan_scene', 0x01F12000, 0x01F27140)
-with open('scene_data_relocator.json', 'w') as outfile:
+
+with open(data_path(f'scenes/{scene_data_relocator.name}.json'), 'w') as outfile:
     dump(scene_data_relocator, outfile, default=lambda x: x.to_json(), indent=4)
