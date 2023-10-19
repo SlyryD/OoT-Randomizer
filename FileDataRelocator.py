@@ -150,8 +150,13 @@ class FileDataRelocator(ABC):
         return NotImplemented
 
     @abstractmethod
-    def get_offset(self, cursor: int) -> tuple[Optional[FileDataRelocator], int]:
+    def get_offset(self, cursor: int) -> tuple[int, Optional[FileDataRelocator]]:
         return NotImplemented
+
+    def expect_file_at_cursor(self, file: FileDataRelocator, cursor: int) -> None:
+        if file is None:
+            raise Exception(
+                f'Unexpected offset at 0x{cursor - self.start:08X} in {self.name}')
 
     def sort_records(self) -> None:
         self.data_records.sort(key=lambda x: x.offset)
@@ -230,7 +235,7 @@ class FileDataRelocator(ABC):
             (x for x in records if x.offset == record.offset), None)
         if existing_record is not None and existing_record != record:
             raise Exception(
-                f'Existing {self.name} {existing_record.type} {type(existing_record)} at 0x{existing_record.offset:08X} does not match new {record.type} {type(record)} at 0x{record.offset:08X}')
+                f'Existing {self.name} {existing_record.type} {type(existing_record).__name__} at 0x{existing_record.offset:08X} does not match new {record.type} {type(record).__name__} at 0x{record.offset:08X}')
         return existing_record
 
     # Parse alternate headers found in scenes and rooms
@@ -238,12 +243,13 @@ class FileDataRelocator(ABC):
         alternate_start = self.start + offset
         cursor = alternate_start
         while True:
-            (header_file, header_offset) = self.get_offset(cursor)
+            (header_offset, header_file) = self.get_offset(cursor)
             if header_offset == -1:
                 break
             # Parse file header
             if header_file is not None:
-                record = header_file.parse_file_header(header_file.start + header_offset)
+                record = header_file.parse_file_header(
+                    header_file.start + header_offset)
                 self.add_records(header_file, record, cursor)
             cursor += 0x04
         return DataRecord(self.rom, RecordType.AlternateHeaders, self.start, offset, cursor - alternate_start)
@@ -255,8 +261,8 @@ class FileDataRelocator(ABC):
         cursor = paths_start
         while True:
             points_count = self.rom.read_byte(cursor)
-            (points_file, points_offset) = self.get_offset(cursor + 0x04)
-            if points_count == 0 or points_file is None:
+            (points_offset, points_file) = self.get_offset(cursor + 0x04)
+            if points_file is None:
                 break
             points_length = align4(points_count * 0x06)
             points_record = DataRecord(
@@ -269,7 +275,8 @@ class FileDataRelocator(ABC):
         # Vertices
         cursor = self.start + offset + 0x0C
         vertices_count = self.rom.read_int16(cursor)
-        (vertices_file, vertices_offset) = self.get_offset(cursor + 0x04)
+        (vertices_offset, vertices_file) = self.get_offset(cursor + 0x04)
+        self.expect_file_at_cursor(vertices_file, cursor + 0x04)
         vertices_length = align4(vertices_count * 0x06)
         vertices_record = DataRecord(
             self.rom, RecordType.Vertices, vertices_file.start, vertices_offset, vertices_length)
@@ -277,21 +284,23 @@ class FileDataRelocator(ABC):
         # Polys
         cursor = self.start + offset + 0x14
         polys_count = self.rom.read_int16(cursor)
-        (polys_file, polys_offset) = self.get_offset(cursor + 0x04)
+        (polys_offset, polys_file) = self.get_offset(cursor + 0x04)
+        self.expect_file_at_cursor(polys_file, cursor + 0x04)
         polys_length = polys_count * 0x10
         polys_record = DataRecord(
             self.rom, RecordType.Polys, polys_file.start, polys_offset, polys_length)
         self.add_records(polys_file, polys_record, cursor)
         # Polytypes
         cursor = self.start + offset + 0x1C
-        (polytypes_file, polytypes_offset) = self.get_offset(cursor)
+        (polytypes_offset, polytypes_file) = self.get_offset(cursor)
+        self.expect_file_at_cursor(polytypes_file, cursor)
         polytypes_length = -1
         polytypes_record = DataRecord(
             self.rom, RecordType.Polytypes, polytypes_file.start, polytypes_offset, polytypes_length)
         self.add_records(polytypes_file, polytypes_record, cursor)
         # Cams
         cursor = self.start + offset + 0x20
-        (cams_file, cams_offset) = self.get_offset(cursor)
+        (cams_offset, cams_file) = self.get_offset(cursor)
         cams_length = -1
         if cams_file is not None:
             cams_record = DataRecord(
@@ -300,9 +309,9 @@ class FileDataRelocator(ABC):
         # Waterboxes
         cursor = self.start + offset + 0x24
         waterboxes_count = self.rom.read_int16(cursor)
-        (waterboxes_file, waterboxes_offset) = self.get_offset(cursor + 0x04)
+        (waterboxes_offset, waterboxes_file) = self.get_offset(cursor + 0x04)
         waterboxes_length = waterboxes_count * 0x10
-        if waterboxes_count != 0 and waterboxes_file is not None:
+        if waterboxes_file is not None:
             waterboxes_record = DataRecord(
                 self.rom, RecordType.Waterboxes, waterboxes_file.start, waterboxes_offset, waterboxes_length)
             self.add_records(waterboxes_file, waterboxes_record, cursor)
@@ -317,7 +326,8 @@ class FileDataRelocator(ABC):
         mesh_type = self.rom.read_byte(cursor)
         if mesh_type == 1:  # image
             mesh_format = self.rom.read_byte(cursor + 0x01)
-            (dlist_entry_file, dlist_entry_offset) = self.get_offset(cursor + 0x04)
+            (dlist_entry_offset, dlist_entry_file) = self.get_offset(cursor + 0x04)
+            self.expect_file_at_cursor(dlist_entry_file, cursor + 0x04)
             dlist_entry_record = dlist_entry_file.parse_dlist_entry(
                 dlist_entry_offset)
             self.add_records(dlist_entry_file,
@@ -328,7 +338,8 @@ class FileDataRelocator(ABC):
                 cursor += 0x20
             else:  # multi
                 count = self.rom.read_byte(cursor + 0x08)
-                (backgrounds_file, backgrounds_offset) = self.get_offset(cursor + 0x0C)
+                (backgrounds_offset, backgrounds_file) = self.get_offset(cursor + 0x0C)
+                self.expect_file_at_cursor(backgrounds_file, cursor + 0x0C)
                 backgrounds_record = backgrounds_file.parse_backgrounds(
                     backgrounds_offset, count)
                 self.add_records(backgrounds_file,
@@ -336,11 +347,13 @@ class FileDataRelocator(ABC):
                 cursor += 0x10
         else:  # normal or cullable
             count = self.rom.read_byte(cursor + 0x01)
-            (start_file, start_offset) = self.get_offset(cursor + 0x04)
+            (start_offset, start_file) = self.get_offset(cursor + 0x04)
+            self.expect_file_at_cursor(start_file, cursor + 0x04)
             start_record = start_file.parse_dlist_entries(
                 start_offset, count) if mesh_type == 0 else start_file.parse_cullable_entries(start_offset, count)
             self.add_records(start_file, start_record, cursor + 0x04)
-            (end_file, end_offset) = self.get_offset(cursor + 0x08)
+            (end_offset, end_file) = self.get_offset(cursor + 0x08)
+            self.expect_file_at_cursor(end_file, cursor + 0x08)
             end_type = RecordType.DlistEntry if mesh_type == 0 else RecordType.CullableEntries
             end_record = DataRecord(
                 self.rom, end_type, end_file.start, end_offset, 0)
@@ -360,11 +373,11 @@ class FileDataRelocator(ABC):
     def parse_dlist_entry(self, offset: int) -> DataRecord:
         dlist_entry_start = self.start + offset
         cursor = dlist_entry_start
-        (opa_file, opa_offset) = self.get_offset(cursor)
+        (opa_offset, opa_file) = self.get_offset(cursor)
         if opa_file is not None:
             opa_record = opa_file.parse_dlist(opa_offset)
             self.add_records(opa_file, opa_record, cursor)
-        (xlu_file, xlu_offset) = self.get_offset(cursor + 0x04)
+        (xlu_offset, xlu_file) = self.get_offset(cursor + 0x04)
         if xlu_file is not None:
             xlu_record = xlu_file.parse_dlist(xlu_offset)
             self.add_records(xlu_file, xlu_record, cursor + 0x04)
@@ -375,40 +388,43 @@ class FileDataRelocator(ABC):
         cursor = dlist_start
         while True:
             op = self.rom.read_byte(cursor)
-            (file, offset) = self.get_offset(cursor + 0x04)
+            if op == 0xDF:  # G_ENDDL
+                cursor += 0x08
+                break
+            (op_offset, op_file) = self.get_offset(cursor + 0x04)
+            if op_file is None:  # Ops without pointers to data
+                cursor += 0x08
+                continue
             if op == 0x01:  # G_VTX
                 vtx_count = self.rom.read_int24(cursor + 0x01) >> 12
                 record = DataRecord(
-                    self.rom, RecordType.Vtx, file.start, offset, vtx_count * 0x10)
+                    self.rom, RecordType.Vtx, op_file.start, op_offset, vtx_count * 0x10)
             elif op == 0x04:  # G_BRANCH_Z
-                record = file.parse_dlist(offset)
+                record = op_file.parse_dlist(op_offset)
             elif op == 0xD6:  # G_DMA_IO
                 raise Exception('G_DMA_IO not supported')
             elif op == 0xDA:  # G_MTX
                 record = DataRecord(
-                    self.rom, RecordType.Mtx, file.start, offset, 0x40)
+                    self.rom, RecordType.Mtx, op_file.start, op_offset, 0x40)
             elif op == 0xDB:  # G_MOVEWORD
                 raise Exception('G_MOVEWORD not supported')
             elif op == 0xDC:  # G_MOVEMEM
                 raise Exception('G_MOVEMEM not supported')
             elif op == 0xDE:  # G_DL
-                record = file.parse_dlist(offset)
+                record = op_file.parse_dlist(op_offset)
             elif op == 0xFD:  # G_SETTIMG
                 record = DataRecord(
-                    self.rom, RecordType.SetTImg, file.start, offset, -1)
+                    self.rom, RecordType.SetTImg, op_file.start, op_offset, -1)
             elif op == 0xFE:  # G_SETZIMG
                 record = DataRecord(
-                    self.rom, RecordType.SetZImg, file.start, offset, -1)
+                    self.rom, RecordType.SetZImg, op_file.start, op_offset, -1)
             elif op == 0xFF:  # G_SETCIMG
                 record = DataRecord(
-                    self.rom, RecordType.SetCImg, file.start, offset, -1)
-            elif op == 0xDF:  # G_ENDDL
-                cursor += 0x08
-                break
-            else:  # Ops without pointers to data
-                cursor += 0x08
-                continue
-            self.add_records(file, record, cursor + 0x04)
+                    self.rom, RecordType.SetCImg, op_file.start, op_offset, -1)
+            else:
+                raise Exception(
+                    f'Unexpected op 0x{op:02X} at 0x{cursor - self.start:08X} in {self.name}')
+            self.add_records(op_file, record, cursor + 0x04)
             cursor += 0x08
         return DataRecord(self.rom, RecordType.Dlist, self.start, offset, cursor - dlist_start)
 
@@ -424,11 +440,12 @@ class FileDataRelocator(ABC):
     def parse_background(self, offset: int) -> DataRecord:
         background_start = self.start + offset
         cursor = background_start
-        (source_file, source_offset) = self.get_offset(cursor + 0x04)
+        (source_offset, source_file) = self.get_offset(cursor + 0x04)
+        self.expect_file_at_cursor(source_file, cursor + 0x04)
         source_record = DataRecord(
             self.rom, RecordType.BackgroundSource, source_file.start, source_offset, -1)  # TODO.Sly size
         self.add_records(source_file, source_record, cursor)
-        (tlut_file, tlut_offset) = self.get_offset(cursor + 0x0C)
+        (tlut_offset, tlut_file) = self.get_offset(cursor + 0x0C)
         if tlut_file is not None:
             tlut_record = DataRecord(
                 self.rom, RecordType.BackgroundTlut, tlut_file.start, tlut_offset, -1)  # TODO.Sly size
@@ -470,8 +487,14 @@ class SceneDataRelocator(FileDataRelocator):
         cursor: int = scene_start
         while True:
             command = self.rom.read_byte(cursor)
+            if command == 0x14:  # Terminator
+                cursor += 0x08
+                break
             count = self.rom.read_byte(cursor + 0x01)
-            (file, offset) = self.get_offset(cursor + 0x04)
+            (offset, file) = self.get_offset(cursor + 0x04)
+            if file is None:  # Commands without pointers to data
+                cursor += 0x08
+                continue
             if command == 0x18:  # AlternateHeaders
                 record = file.parse_alternate_headers(offset)
             elif command == 0x04:  # RoomList
@@ -498,12 +521,9 @@ class SceneDataRelocator(FileDataRelocator):
             elif command == 0x17:  # CutsceneData
                 record = DataRecord(
                     self.rom, RecordType.CutsceneData, file.start, offset, -1)
-            elif command == 0x14:  # Terminator
-                cursor += 0x08
-                break
-            else:  # Commands without pointers to data
-                cursor += 0x08
-                continue
+            else:
+                raise Exception(
+                    f'Unexpected command 0x{command:02X} at 0x{cursor - self.start:08X} in {self.name}')
             self.add_records(file, record, cursor)
             cursor += 0x08
         # Return data record for the scene header
@@ -521,14 +541,14 @@ class SceneDataRelocator(FileDataRelocator):
             cursor += 0x08
         return DataRecord(self.rom, RecordType.RoomList, self.start, offset, cursor - rooms_start)
 
-    def get_offset(self, cursor: int) -> tuple[Optional[FileDataRelocator], int]:
+    def get_offset(self, cursor: int) -> tuple[int, Optional[FileDataRelocator]]:
         segment = self.rom.read_byte(cursor)
         offset = self.rom.read_int24(cursor + 1)
         if segment == 0x00 and offset == 0:
-            return (None, 0)  # null
+            return (0, None)  # null
         if segment == 0x02:
-            return (self, offset)  # scene
-        return (None, -1)  # unknown
+            return (offset, self)  # scene
+        return (-1, None)  # unknown
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -547,8 +567,14 @@ class RoomDataRelocator(FileDataRelocator):
         cursor: int = room_start
         while True:
             command = self.rom.read_byte(cursor)
+            if command == 0x14:  # Terminator
+                cursor += 0x08
+                break
             count = self.rom.read_byte(cursor + 0x01)
-            (file, offset) = self.get_offset(cursor + 0x04)
+            (offset, file) = self.get_offset(cursor + 0x04)
+            if file is None:  # Commands without pointers to data
+                cursor += 0x08
+                continue
             if command == 0x18:  # AlternateHeaders
                 record = file.parse_alternate_headers(offset)
             elif command == 0x0A:  # RoomMesh
@@ -559,27 +585,24 @@ class RoomDataRelocator(FileDataRelocator):
             elif command == 0x01:  # ActorList
                 record = DataRecord(
                     self.rom, RecordType.ActorList, file.start, offset, count * 0x10)
-            elif command == 0x14:  # Terminator
-                cursor += 0x08
-                break
-            else:  # Commands without pointers to data
-                cursor += 0x08
-                continue
+            else:
+                raise Exception(
+                    f'Unexpected command 0x{command:02X} at 0x{cursor - self.start:08X} in {self.name}')
             self.add_records(file, record, cursor)
             cursor += 0x08
         # Return data record for the room header
         return DataRecord(self.rom, RecordType.RoomHeader, self.start, room_start - self.start, cursor - room_start)
 
-    def get_offset(self, cursor: int) -> tuple[Optional[FileDataRelocator], int]:
+    def get_offset(self, cursor: int) -> tuple[int, Optional[FileDataRelocator]]:
         segment = self.rom.read_byte(cursor)
         offset = self.rom.read_int24(cursor + 1)
         if segment == 0x00 and offset == 0:
-            return (None, 0)  # null
+            return (0, None)  # null
         if segment == 0x02:
-            return (self.scene, offset)  # scene
+            return (offset, self.scene)  # scene
         if segment == 0x03:
-            return (self, offset)  # room
-        return (None, -1)  # unknown
+            return (offset, self)  # room
+        return (-1, None)  # unknown
 
 
 # rom = Rom("ZOOTDEC.z64")
