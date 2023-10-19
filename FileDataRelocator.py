@@ -83,6 +83,7 @@ class DataRecord:
     def to_json(self) -> dict[str, Any]:
         return {
             'type': self.type.value,
+            'start': f'0x{self.start:08X}',
             'start_offset': f'0x{self.offset:08X}',
             'end_offset': f'0x{self.offset + self.length:08X}'
         }
@@ -168,8 +169,14 @@ class FileDataRelocator(ABC):
             record = self.data_records[i]
             next_record = self.data_records[i + 1]
             if record.offset + record.length > next_record.offset:
-                raise Exception(
-                    f'Overlapping records: {record.type.value} at offset 0x{record.offset:08X} and {next_record.type.value} at offset 0x{next_record.offset:08X}')
+                if record.type == RecordType.Vtx and next_record.type == RecordType.Vtx:
+                    # Vtx records can overlap, e.g.,
+                    # gsSPVertex(&spot00_room_0Vtx_0043E0[43], 32, 0)
+                    # gsSPVertex(&spot00_room_0Vtx_0043E0[73], 14, 0)
+                    continue
+                else:
+                    raise Exception(
+                        f'Overlapping records: {record.type.value} at offset 0x{record.offset:08X} and {next_record.type.value} at offset 0x{next_record.offset:08X}')
 
     # Add unreferenced records between sorted records
     def add_unreferenced_records(self) -> None:
@@ -401,15 +408,9 @@ class FileDataRelocator(ABC):
                     self.rom, RecordType.Vtx, op_file.start, op_offset, vtx_count * 0x10)
             elif op == 0x04:  # G_BRANCH_Z
                 record = op_file.parse_dlist(op_offset)
-            elif op == 0xD6:  # G_DMA_IO
-                raise Exception('G_DMA_IO not supported')
             elif op == 0xDA:  # G_MTX
                 record = DataRecord(
                     self.rom, RecordType.Mtx, op_file.start, op_offset, 0x40)
-            elif op == 0xDB:  # G_MOVEWORD
-                raise Exception('G_MOVEWORD not supported')
-            elif op == 0xDC:  # G_MOVEMEM
-                raise Exception('G_MOVEMEM not supported')
             elif op == 0xDE:  # G_DL
                 record = op_file.parse_dlist(op_offset)
             elif op == 0xFD:  # G_SETTIMG
@@ -536,8 +537,14 @@ class SceneDataRelocator(FileDataRelocator):
             room_start = self.rom.read_int32(cursor)
             room_end = self.rom.read_int32(cursor + 0x04)
             # Handle the room file
-            self.rooms.append(RoomDataRelocator(
-                self.rom, f'{self.name.replace("_scene", "_room")}_{i}', room_start, room_end, self))
+            existing_room: Optional[RoomDataRelocator] = next(
+                (x for x in self.rooms if x.start == room_start), None)
+            if existing_room is None:
+                self.rooms.append(RoomDataRelocator(
+                    self.rom, f'{self.name.replace("_scene", "_room")}_{i}', room_start, room_end, self))
+            elif existing_room.end != room_end:
+                raise Exception(
+                    f'Existing room {existing_room.name} at 0x{existing_room.start:08X} does not match new room at 0x{room_start:08X}')
             cursor += 0x08
         return DataRecord(self.rom, RecordType.RoomList, self.start, offset, cursor - rooms_start)
 
