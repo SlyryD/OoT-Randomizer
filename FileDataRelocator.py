@@ -1,7 +1,7 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
 from enum import Enum
-from json import dump
+from json import dump, dumps
 from typing import Any, Optional, TypeVar
 
 from MQ import align4
@@ -30,6 +30,7 @@ class RecordType(str, Enum):
     Polytypes = 'Polytypes'
     Cams = 'Cams'
     Waterboxes = 'Waterboxes'
+    CamPosData = 'CamPosData'
 
     # Room header record types
     RoomHeader = 'RoomHeader'
@@ -61,9 +62,7 @@ class RecordType(str, Enum):
 
 class DataRecord:
     def __init__(self, rom: Rom, type: RecordType, start: int, offset: int, length: int) -> None:
-        if offset == -1:
-            raise Exception(
-                f'Invalid offset {offset} for {type.value} data record')
+        assert offset != -1
 
         self.rom: Rom = rom
         self.type: RecordType = type
@@ -81,6 +80,9 @@ class DataRecord:
     def __hash__(self) -> int:
         return hash((self.type, self.offset, self.length))
 
+    def __str__(self) -> str:
+        return dumps(self.to_json(), default=lambda x: x.to_json(), indent=2)
+
     def to_json(self) -> dict[str, Any]:
         return {
             'type': self.type.value,
@@ -91,15 +93,16 @@ class DataRecord:
 
 
 class PointerRecord:
-    def __init__(self, rom: Rom, type: RecordType, start: int, offset: int, record: DataRecord) -> None:
-        if offset == -1:
-            raise Exception(
-                f'Invalid offset {offset} for {type.value} pointer record')
+    def __init__(self, rom: Rom, type: RecordType, start: int, offset: int, pointer: int, record: DataRecord) -> None:
+        assert offset != -1
 
         self.rom: Rom = rom
         self.type: RecordType = type
         self.start: int = start
         self.offset: int = offset
+        # pointer can differ from record.offset by pointing to the middle of the data record
+        # gsSPVertex(&spot00_room_0Vtx_0043E0[43], 32, 0)
+        self.pointer: int = pointer
         self.record: DataRecord = record
 
     def __eq__(self, other: object) -> bool:
@@ -110,10 +113,14 @@ class PointerRecord:
     def __hash__(self) -> int:
         return hash((self.type, self.offset, self.record))
 
+    def __str__(self) -> str:
+        return dumps(self.to_json(), default=lambda x: x.to_json(), indent=2)
+
     def to_json(self) -> dict[str, Any]:
         return {
             'type': self.type.value,
             'offset': f'0x{self.offset:08X}',
+            'pointer': f'0x{self.pointer:08X}',
             'record': self.record.to_json()
         }
 
@@ -137,6 +144,9 @@ class FileDataRelocator(ABC):
 
         # Sort records by offset
         self.sort_records()
+
+        # Merge records where the pointers don't necessarily point to the start of the data record
+        self.merge_records()
 
         # Check for overlapping records
         self.check_for_overlapping_records()
@@ -167,20 +177,55 @@ class FileDataRelocator(ABC):
         self.data_records.sort(key=lambda x: x.offset)
         self.pointer_records.sort(key=lambda x: x.offset)
 
+    def merge_records(self) -> None:
+        # Iterate data records in order
+        index: int = 0
+        tracked_record: Optional[DataRecord] = None
+        while index < len(self.data_records) - 1:
+            record: DataRecord = self.data_records[index]
+            next_record: DataRecord = self.data_records[index + 1]
+            if self.can_merge(record, next_record):
+                # Merge next data record into current data record
+                record.length = next_record.offset + next_record.length - record.offset
+                removed_record = self.data_records.pop(index + 1)
+                assert removed_record == next_record
+                # Update pointer record to point to current data record
+                pointer_record: Optional[PointerRecord] = next(
+                    (x for x in self.pointer_records if x.record == next_record), None)
+                assert pointer_record is not None
+                pointer_record.record = record
+                # Track record to align and read later
+                tracked_record = record
+            else:
+                # Align and read record
+                if tracked_record is not None:
+                    self.align_and_read_data(tracked_record)
+                    tracked_record = None
+                index += 1
+        # Align and read record
+        if tracked_record is not None:
+            self.align_and_read_data(tracked_record)
+            tracked_record = None
+
+    def can_merge(self, record: DataRecord, next_record: DataRecord) -> bool:
+        if record.type == RecordType.CamPosData and next_record.type == RecordType.CamPosData:
+            return True
+        if record.type == RecordType.Vtx and next_record.type == RecordType.Vtx:
+            return True
+        return False
+
+    def align_and_read_data(self, record: DataRecord) -> None:
+        record.length = align4(record.length)
+        record.data = record.rom.read_bytes(record.start + record.offset, record.length)
+
     def check_for_overlapping_records(self) -> None:
         count = len(self.data_records)
         for i in range(0, count - 1):
             record = self.data_records[i]
             next_record = self.data_records[i + 1]
             if record.offset + record.length > next_record.offset:
-                if record.type == RecordType.Vtx and next_record.type == RecordType.Vtx:
-                    # Vtx records can overlap, e.g.,
-                    # gsSPVertex(&spot00_room_0Vtx_0043E0[43], 32, 0)
-                    # gsSPVertex(&spot00_room_0Vtx_0043E0[73], 14, 0)
-                    continue
-                else:
-                    raise Exception(
-                        f'Overlapping records: {record.type.value} at offset 0x{record.offset:08X} and {next_record.type.value} at offset 0x{next_record.offset:08X}')
+                raise Exception(
+                    f'Overlapping records: {record.type.value} at offset 0x{record.offset:08X} and {next_record.type.value} at offset 0x{next_record.offset:08X}')
 
     # Add unknown record at file end
     def add_unknown_record_at_file_end(self) -> None:
@@ -203,11 +248,8 @@ class FileDataRelocator(ABC):
     def fix_missing_lengths(self) -> None:
         # Iterate data records in reverse in case we have multiple missing lengths in a row
         index: int = len(self.data_records) - 1
-        if self.data_records[index].type != RecordType.Unknown:
-            raise Exception(
-                'Expected unknown record at the end of the scene file')
-        if self.data_records[index].length == -1:
-            raise Exception('Cannot determine length of last record')
+        assert self.data_records[index].type == RecordType.Unknown
+        assert self.data_records[index].length != -1
         index -= 1
         while index >= 0:
             record = self.data_records[index]
@@ -234,7 +276,7 @@ class FileDataRelocator(ABC):
     def add_records(self, file: FileDataRelocator, data_record: DataRecord, cursor: int) -> None:
         data_record = self.add_record(file.data_records, data_record)
         pointer_record = PointerRecord(
-            self.rom, data_record.type, self.start, cursor - self.start, data_record)
+            self.rom, data_record.type, self.start, cursor - self.start, data_record.offset, data_record)
         self.add_record(self.pointer_records, pointer_record)
 
     # Add and return the given record or return the existing one
@@ -316,13 +358,10 @@ class FileDataRelocator(ABC):
             self.rom, RecordType.Polytypes, polytypes_file.start, polytypes_offset, polytypes_length)
         self.add_records(polytypes_file, polytypes_record, cursor)
         # Cams
-        # TODO.Sly: Cam Pos Data
         cursor = self.start + offset + 0x20
         (cams_offset, cams_file) = self.get_offset(cursor)
-        cams_length = -1
         if cams_file is not None:
-            cams_record = DataRecord(
-                self.rom, RecordType.Cams, cams_file.start, cams_offset, cams_length)
+            cams_record = cams_file.parse_cams(cams_offset)
             self.add_records(cams_file, cams_record, cursor)
         # Waterboxes
         cursor = self.start + offset + 0x24
@@ -335,6 +374,27 @@ class FileDataRelocator(ABC):
             self.add_records(waterboxes_file, waterboxes_record, cursor)
         # Return data record for the collision header
         return DataRecord(self.rom, RecordType.CollisionHeader, self.start, offset, 0x2C)
+
+    def parse_cams(self, offset: int) -> DataRecord:
+        cams_start = self.start + offset
+        cursor = cams_start
+        while True:
+            cam_pos_data_count = self.rom.read_int16(cursor + 0x02)
+            if cam_pos_data_count == 0:
+                cursor += 0x08
+                continue
+            (cam_pos_data_offset, cam_pos_data_file) = self.get_offset(cursor + 0x04)
+            if cam_pos_data_offset == 0:
+                raise Exception(
+                    f'Unexpected null cam pos data pointer for count {cam_pos_data_count}')
+            if cam_pos_data_offset == -1:
+                break
+            cam_pos_data_length = cam_pos_data_count * 0x06
+            cam_pos_data_record = DataRecord(
+                self.rom, RecordType.CamPosData, cam_pos_data_file.start, cam_pos_data_offset, cam_pos_data_length)
+            self.add_records(cam_pos_data_file, cam_pos_data_record, cursor)
+            cursor += 0x08
+        return DataRecord(self.rom, RecordType.Cams, self.start, offset, cursor - cams_start)
 
     # Parse data referenced by rooms
 
@@ -633,4 +693,4 @@ scene_data_relocator = SceneDataRelocator(
 # rom, 'ddan_scene', 0x01F12000, 0x01F27140)
 
 with open(data_path(f'scenes/{scene_data_relocator.name}.json'), 'w') as outfile:
-    dump(scene_data_relocator, outfile, default=lambda x: x.to_json(), indent=4)
+    dump(scene_data_relocator, outfile, default=lambda x: x.to_json(), indent=2)
