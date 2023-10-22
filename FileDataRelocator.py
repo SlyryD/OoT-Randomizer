@@ -50,7 +50,7 @@ class RecordType(str, Enum):
     SetCImg = 'SetCImg'
     Backgrounds = 'Backgrounds'
     Background = 'Background'
-    BackgroundSource = 'BackgroundSource'
+    BackgroundImage = 'BackgroundImage'
     BackgroundTlut = 'BackgroundTlut'
     CullableEntries = 'CullableEntries'
     CullableEntry = 'CullableEntry'
@@ -148,14 +148,14 @@ class FileDataRelocator(ABC):
         # Merge records where the pointers don't necessarily point to the start of the data record
         self.merge_records()
 
-        # Check for overlapping records
-        self.check_for_overlapping_records()
-
         # Add unknown data record from last referenced data record to end of file
         self.add_unknown_record_at_file_end()
 
         # Fix missing lengths
         self.fix_missing_lengths()
+
+        # Check for overlapping records
+        self.check_for_overlapping_records()
 
         # Add unknown data records between sorted records
         self.add_unknown_records()
@@ -216,16 +216,8 @@ class FileDataRelocator(ABC):
 
     def align_and_read_data(self, record: DataRecord) -> None:
         record.length = align4(record.length)
-        record.data = record.rom.read_bytes(record.start + record.offset, record.length)
-
-    def check_for_overlapping_records(self) -> None:
-        count = len(self.data_records)
-        for i in range(0, count - 1):
-            record = self.data_records[i]
-            next_record = self.data_records[i + 1]
-            if record.offset + record.length > next_record.offset:
-                raise Exception(
-                    f'Overlapping records: {record.type.value} at offset 0x{record.offset:08X} and {next_record.type.value} at offset 0x{next_record.offset:08X}')
+        record.data = record.rom.read_bytes(
+            record.start + record.offset, record.length)
 
     # Add unknown record at file end
     def add_unknown_record_at_file_end(self) -> None:
@@ -257,6 +249,15 @@ class FileDataRelocator(ABC):
             if record.length == -1:
                 record.length = next_record.offset - record.offset
             index -= 1
+
+    def check_for_overlapping_records(self) -> None:
+        count = len(self.data_records)
+        for i in range(0, count - 1):
+            record = self.data_records[i]
+            next_record = self.data_records[i + 1]
+            if record.offset + record.length > next_record.offset:
+                raise Exception(
+                    f'Overlapping records: {record.type.value} at offset 0x{record.offset:08X} and {next_record.type.value} at offset 0x{next_record.offset:08X}')
 
     # Add unknown records between sorted records
     def add_unknown_records(self) -> None:
@@ -353,9 +354,8 @@ class FileDataRelocator(ABC):
         cursor = self.start + offset + 0x1C
         (polytypes_offset, polytypes_file) = self.get_offset(cursor)
         self.expect_file_at_cursor(polytypes_file, cursor)
-        polytypes_length = -1
         polytypes_record = DataRecord(
-            self.rom, RecordType.Polytypes, polytypes_file.start, polytypes_offset, polytypes_length)
+            self.rom, RecordType.Polytypes, polytypes_file.start, polytypes_offset, -1)
         self.add_records(polytypes_file, polytypes_record, cursor)
         # Cams
         cursor = self.start + offset + 0x20
@@ -380,13 +380,11 @@ class FileDataRelocator(ABC):
         cursor = cams_start
         while True:
             cam_pos_data_count = self.rom.read_int16(cursor + 0x02)
-            if cam_pos_data_count == 0:
-                cursor += 0x08
-                continue
             (cam_pos_data_offset, cam_pos_data_file) = self.get_offset(cursor + 0x04)
             if cam_pos_data_offset == 0:
-                raise Exception(
-                    f'Unexpected null cam pos data pointer for count {cam_pos_data_count}')
+                assert cam_pos_data_count == 0
+                cursor += 0x08
+                continue
             if cam_pos_data_offset == -1:
                 break
             cam_pos_data_length = cam_pos_data_count * 0x06
@@ -512,17 +510,31 @@ class FileDataRelocator(ABC):
     def parse_background(self, offset: int) -> DataRecord:
         background_start = self.start + offset
         cursor = background_start
-        (source_offset, source_file) = self.get_offset(cursor + 0x04)
-        self.expect_file_at_cursor(source_file, cursor + 0x04)
-        source_record = DataRecord(
-            self.rom, RecordType.BackgroundSource, source_file.start, source_offset, -1)  # TODO.Sly size
-        self.add_records(source_file, source_record, cursor + 0x04)
+        (image_offset, image_file) = self.get_offset(cursor + 0x04)
+        self.expect_file_at_cursor(image_file, cursor + 0x04)
         (tlut_offset, tlut_file) = self.get_offset(cursor + 0x0C)
-        if tlut_file is not None:
-            tlut_record = DataRecord(
-                self.rom, RecordType.BackgroundTlut, tlut_file.start, tlut_offset, -1)  # TODO.Sly size
-            self.add_records(tlut_file, tlut_record, cursor + 0x0C)
+        assert tlut_offset == 0 and tlut_file is None
+        image_width = self.rom.read_int16(cursor + 0x10)
+        image_height = self.rom.read_int16(cursor + 0x12)
+        image_siz = self.rom.read_byte(cursor + 0x15)
+        image_length = image_width * image_height * \
+            self.get_pixel_bytes_from_siz(image_siz)
+        image_record = DataRecord(
+            self.rom, RecordType.BackgroundImage, image_file.start, image_offset, image_length)
+        self.add_records(image_file, image_record, cursor + 0x04)
         return DataRecord(self.rom, RecordType.Background, self.start, offset, 0x1C)
+
+    def get_pixel_bytes_from_siz(self, siz: int) -> int:
+        if siz == 0:  # G_IM_SIZ_4b
+            return 0.5
+        elif siz == 1:  # G_IM_SIZ_8b
+            return 1
+        elif siz == 2:  # G_IM_SIZ_16b
+            return 2
+        elif siz == 3:  # G_IM_SIZ_32b
+            return 4
+        else:
+            raise Exception(f'Unexpected siz {siz}')
 
     def parse_cullable_entries(self, offset: int, count: int) -> DataRecord:
         cullable_entries_start = self.start + offset
@@ -683,14 +695,228 @@ class RoomDataRelocator(FileDataRelocator):
         return (-1, None)  # unknown
 
 
+# scene_table = 0x00B71440 # for Vanilla
+# scene_table = 0x00BA0BB0 # for MQ
+def generate_scene_file_data_relocators(rom: Rom, scene_table=0x00B71440):
+    actors = {}
+    for scene in range(0x00, 0x04):
+        scene_start = rom.read_int32(scene_table + 0x00 + (scene * 0x14))
+        entry = rom.dma.get_dmadata_record_by_key(scene_start)
+        scene_data_relocator = SceneDataRelocator(
+            rom, get_scene_name(scene), scene_start, entry.end)
+        with open(data_path(f'scenes/{scene_data_relocator.name}.json'), 'w') as outfile:
+            dump(scene_data_relocator, outfile,
+                 default=lambda x: x.to_json(), indent=2)
+    return actors
+
+
+def get_scene_name(scene: int) -> str:
+    if scene == 0x00:
+        return 'ydan_scene'
+    if scene == 0x01:
+        return 'ddan_scene'
+    if scene == 0x02:
+        return 'bdan_scene'
+    if scene == 0x03:
+        return 'Bmori1_scene'
+    if scene == 0x04:
+        return 'HIDAN_scene'
+    if scene == 0x05:
+        return 'MIZUsin_scene'
+    if scene == 0x06:
+        return 'jyasinzou_scene'
+    if scene == 0x07:
+        return 'HAKAdan_scene'
+    if scene == 0x08:
+        return 'HAKAdanCH_scene'
+    if scene == 0x09:
+        return 'ice_doukutu_scene'
+    if scene == 0x0A:
+        return 'ganon_scene'
+    if scene == 0x0B:
+        return 'men_scene'
+    if scene == 0x0C:
+        return 'gerudoway_scene'
+    if scene == 0x0D:
+        return 'ganontika_scene'
+    if scene == 0x0E:
+        return 'ganon_sonogo_scene'
+    if scene == 0x0F:
+        return 'ganontikasonogo_scene'
+    if scene == 0x10:
+        return 'takaraya_scene'
+    if scene == 0x11:
+        return 'ydan_boss_scene'
+    if scene == 0x12:
+        return 'ddan_boss_scene'
+    if scene == 0x13:
+        return 'bdan_boss_scene'
+    if scene == 0x14:
+        return 'moribossroom_scene'
+    if scene == 0x15:
+        return 'FIRE_bs_scene'
+    if scene == 0x16:
+        return 'MIZUsin_bs_scene'
+    if scene == 0x17:
+        return 'jyasinboss_scene'
+    if scene == 0x18:
+        return 'HAKAdan_bs_scene'
+    if scene == 0x19:
+        return 'ganon_boss_scene'
+    if scene == 0x1A:
+        return 'ganon_final_scene'
+    if scene == 0x1B:
+        return 'entra_scene'
+    if scene == 0x1C:
+        return 'entra_n_scene'
+    if scene == 0x1D:
+        return 'enrui_scene'
+    if scene == 0x1E:
+        return 'market_alley_scene'
+    if scene == 0x1F:
+        return 'market_alley_n_scene'
+    if scene == 0x20:
+        return 'market_day_scene'
+    if scene == 0x21:
+        return 'market_night_scene'
+    if scene == 0x22:
+        return 'market_ruins_scene'
+    if scene == 0x23:
+        return 'shrine_scene'
+    if scene == 0x24:
+        return 'shrine_n_scene'
+    if scene == 0x25:
+        return 'shrine_r_scene'
+    if scene == 0x26:
+        return 'kokiri_home_scene'
+    if scene == 0x27:
+        return 'kokiri_home3_scene'
+    if scene == 0x28:
+        return 'kokiri_home4_scene'
+    if scene == 0x29:
+        return 'kokiri_home5_scene'
+    if scene == 0x2A:
+        return 'kakariko_scene'
+    if scene == 0x2B:
+        return 'kakariko3_scene'
+    if scene == 0x2C:
+        return 'shop1_scene'
+    if scene == 0x2D:
+        return 'kokiri_shop_scene'
+    if scene == 0x2E:
+        return 'golon_scene'
+    if scene == 0x2F:
+        return 'zoora_scene'
+    if scene == 0x30:
+        return 'drag_scene'
+    if scene == 0x31:
+        return 'alley_shop_scene'
+    if scene == 0x32:
+        return 'night_shop_scene'
+    if scene == 0x33:
+        return 'face_shop_scene'
+    if scene == 0x34:
+        return 'link_home_scene'
+    if scene == 0x35:
+        return 'impa_scene'
+    if scene == 0x36:
+        return 'malon_stable_scene'
+    if scene == 0x37:
+        return 'labo_scene'
+    if scene == 0x38:
+        return 'hylia_labo_scene'
+    if scene == 0x39:
+        return 'tent_scene'
+    if scene == 0x3A:
+        return 'hut_scene'
+    if scene == 0x3B:
+        return 'daiyousei_izumi_scene'
+    if scene == 0x3C:
+        return 'yousei_izumi_tate_scene'
+    if scene == 0x3D:
+        return 'yousei_izumi_yoko_scene'
+    if scene == 0x3E:
+        return 'kakusiana_scene'
+    if scene == 0x3F:
+        return 'hakaana_scene'
+    if scene == 0x40:
+        return 'hakaana2_scene'
+    if scene == 0x41:
+        return 'hakaana_ouke_scene'
+    if scene == 0x42:
+        return 'syatekijyou_scene'
+    if scene == 0x43:
+        return 'tokinoma_scene'
+    if scene == 0x44:
+        return 'kenjyanoma_scene'
+    if scene == 0x45:
+        return 'hairal_niwa_scene'
+    if scene == 0x46:
+        return 'hairal_niwa_n_scene'
+    if scene == 0x47:
+        return 'hiral_demo_scene'
+    if scene == 0x48:
+        return 'hakasitarelay_scene'
+    if scene == 0x49:
+        return 'turibori_scene'
+    if scene == 0x4A:
+        return 'nakaniwa_scene'
+    if scene == 0x4B:
+        return 'bowling_scene'
+    if scene == 0x4C:
+        return 'souko_scene'
+    if scene == 0x4D:
+        return 'miharigoya_scene'
+    if scene == 0x4E:
+        return 'mahouya_scene'
+    if scene == 0x4F:
+        return 'ganon_demo_scene'
+    if scene == 0x50:
+        return 'kinsuta_scene'
+    if scene == 0x51:
+        return 'spot00_scene'
+    if scene == 0x52:
+        return 'spot01_scene'
+    if scene == 0x53:
+        return 'spot02_scene'
+    if scene == 0x54:
+        return 'spot03_scene'
+    if scene == 0x55:
+        return 'spot04_scene'
+    if scene == 0x56:
+        return 'spot05_scene'
+    if scene == 0x57:
+        return 'spot06_scene'
+    if scene == 0x58:
+        return 'spot07_scene'
+    if scene == 0x59:
+        return 'spot08_scene'
+    if scene == 0x5A:
+        return 'spot09_scene'
+    if scene == 0x5B:
+        return 'spot10_scene'
+    if scene == 0x5C:
+        return 'spot11_scene'
+    if scene == 0x5D:
+        return 'spot12_scene'
+    if scene == 0x5E:
+        return 'spot13_scene'
+    if scene == 0x5F:
+        return 'spot15_scene'
+    if scene == 0x60:
+        return 'spot16_scene'
+    if scene == 0x61:
+        return 'spot17_scene'
+    if scene == 0x62:
+        return 'spot18_scene'
+    if scene == 0x63:
+        return 'spot20_scene'
+    if scene == 0x64:
+        return 'ganon_tou_scene'
+    raise Exception(f'Unexpected scene {scene:02X}')
+
+
 # rom = Rom('ZOOTDEC.z64')
 # fully_mix_skulls(rom)
 rom = Rom('zeloot_mqdebug.z64')
-
-scene_data_relocator = SceneDataRelocator(
-    rom, 'market_alley_n_scene', 0x02A28000, 0x02A292F0)
-# rom, 'spot00_scene', 0x01FB8000, 0x01FE2220)
-# rom, 'ddan_scene', 0x01F12000, 0x01F27140)
-
-with open(data_path(f'scenes/{scene_data_relocator.name}.json'), 'w') as outfile:
-    dump(scene_data_relocator, outfile, default=lambda x: x.to_json(), indent=2)
+generate_scene_file_data_relocators(rom)
