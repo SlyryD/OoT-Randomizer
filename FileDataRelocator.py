@@ -34,7 +34,6 @@ class RecordType(str, Enum):
 
     # Room header record types
     RoomHeader = 'RoomHeader'
-    RoomMesh = 'RoomMesh'
     ObjectList = 'ObjectList'
     ActorList = 'ActorList'
 
@@ -197,14 +196,16 @@ class FileDataRelocator(ABC):
                 # Track record to align and read later
                 tracked_record = record
             else:
-                # Align and read record
+                # Align and adjust record
                 if tracked_record is not None:
-                    self.align_and_read_data(tracked_record)
+                    self.adjust_record(
+                        tracked_record, tracked_record.offset, align4(tracked_record.length))
                     tracked_record = None
                 index += 1
-        # Align and read record
+        # Align and adjust record
         if tracked_record is not None:
-            self.align_and_read_data(tracked_record)
+            self.adjust_record(
+                tracked_record, tracked_record.offset, align4(tracked_record.length))
             tracked_record = None
 
     def can_merge(self, record: DataRecord, next_record: DataRecord) -> bool:
@@ -214,8 +215,9 @@ class FileDataRelocator(ABC):
             return True
         return False
 
-    def align_and_read_data(self, record: DataRecord) -> None:
-        record.length = align4(record.length)
+    def adjust_record(self, record: DataRecord, offset: int, length: int) -> None:
+        record.offset = offset
+        record.length = length
         record.data = record.rom.read_bytes(
             record.start + record.offset, record.length)
 
@@ -256,8 +258,42 @@ class FileDataRelocator(ABC):
             record = self.data_records[i]
             next_record = self.data_records[i + 1]
             if record.offset + record.length > next_record.offset:
-                raise Exception(
-                    f'Overlapping records: {record.type.value} at offset 0x{record.offset:08X} and {next_record.type.value} at offset 0x{next_record.offset:08X}')
+                if self.is_record_of_unknown_count(record):
+                    # We might parse records without count incorrectly depending on the data that comes next
+                    print(
+                        f'Warning: Overlapping records: {record.type.value} at offset 0x{record.offset:08X} and {next_record.type.value} at offset 0x{next_record.offset:08X} in {self.name}')
+                    self.adjust_record(record, record.offset, next_record.offset - record.offset)
+                else:
+                    raise Exception(
+                        f'Overlapping records: {record.type.value} at offset 0x{record.offset:08X} and {next_record.type.value} at offset 0x{next_record.offset:08X} in {self.name}')
+
+    # Record types referenced by header commands without count
+    def is_record_of_unknown_count(self, record: DataRecord) -> bool:
+        if record.type == RecordType.CollisionHeader:  # 0x03
+            return True
+        if record.type == RecordType.EntranceList:  # 0x06
+            return True
+        if record.type == RecordType.MeshHeader:  # 0x0A
+            return True
+        if record.type == RecordType.PathList:  # 0x0D
+            return True
+        if record.type == RecordType.ExitList:  # 0x13
+            return True
+        if record.type == RecordType.CutsceneData:  # 0x17
+            return True
+        if record.type == RecordType.AlternateHeaders:  # 0x18
+            return True
+        if record.type == RecordType.Polytypes:
+            return True
+        if record.type == RecordType.Cams:
+            return True
+        if record.type == RecordType.SetTImg:
+            return True
+        if record.type == RecordType.SetZImg:
+            return True
+        if record.type == RecordType.SetCImg:
+            return True
+        return False
 
     # Add unknown records between sorted records
     def add_unknown_records(self) -> None:
@@ -295,7 +331,7 @@ class FileDataRelocator(ABC):
             (x for x in records if x.offset == record.offset), None)
         if existing_record is not None and existing_record != record:
             raise Exception(
-                f'Existing {self.name} {existing_record.type} {type(existing_record).__name__} at 0x{existing_record.offset:08X} does not match new {record.type} {type(record).__name__} at 0x{record.offset:08X}')
+                f'Existing {existing_record.type} {type(existing_record).__name__} at 0x{existing_record.offset:08X} does not match new {record.type} {type(record).__name__} at 0x{record.offset:08X} in {self.name}')
         return existing_record
 
     # Parse alternate headers found in scenes and rooms
@@ -396,7 +432,7 @@ class FileDataRelocator(ABC):
 
     # Parse data referenced by rooms
 
-    def parse_room_mesh(self, offset: int) -> DataRecord:
+    def parse_mesh_header(self, offset: int) -> DataRecord:
         mesh_start = self.start + offset
         cursor = mesh_start
         mesh_type = self.rom.read_byte(cursor)
@@ -435,7 +471,7 @@ class FileDataRelocator(ABC):
                 self.rom, end_type, end_file.start, end_offset, 0)
             self.add_records(end_file, end_record, cursor + 0x08)
             cursor += 0x0C
-        return DataRecord(self.rom, RecordType.RoomMesh, self.start, offset, cursor - mesh_start)
+        return DataRecord(self.rom, RecordType.MeshHeader, self.start, offset, cursor - mesh_start)
 
     def parse_dlist_entries(self, offset: int, count: int) -> DataRecord:
         dlist_entries_start = self.start + offset
@@ -475,13 +511,21 @@ class FileDataRelocator(ABC):
                 vtx_count = self.rom.read_int24(cursor + 0x01) >> 12
                 record = DataRecord(
                     self.rom, RecordType.Vtx, op_file.start, op_offset, vtx_count * 0x10)
-            elif op == 0x04:  # G_BRANCH_Z
-                record = op_file.parse_dlist(op_offset)
             elif op == 0xDA:  # G_MTX
                 record = DataRecord(
                     self.rom, RecordType.Mtx, op_file.start, op_offset, 0x40)
             elif op == 0xDE:  # G_DL
                 record = op_file.parse_dlist(op_offset)
+            elif op == 0xE1:  # G_RDPHALF_1
+                lookahead_op = self.rom.read_byte(cursor + 0x08)
+                if lookahead_op == 0x04:  # G_BRANCH_Z
+                    record = op_file.parse_dlist(op_offset)
+                elif lookahead_op == 0xDD:  # G_LOAD_UCODE
+                    raise Exception(
+                        f'Unexpected gsSPLoadUcodeEx at 0x{cursor - self.start:08X} in {self.name}')
+                else:
+                    cursor += 0x08
+                    continue
             elif op == 0xFD:  # G_SETTIMG
                 record = DataRecord(
                     self.rom, RecordType.SetTImg, op_file.start, op_offset, -1)
@@ -534,7 +578,7 @@ class FileDataRelocator(ABC):
         elif siz == 3:  # G_IM_SIZ_32b
             return 4
         else:
-            raise Exception(f'Unexpected siz {siz}')
+            raise Exception(f'Unexpected siz {siz} in {self.name}')
 
     def parse_cullable_entries(self, offset: int, count: int) -> DataRecord:
         cullable_entries_start = self.start + offset
@@ -579,6 +623,13 @@ class SceneDataRelocator(FileDataRelocator):
             if file is None:  # Commands without pointers to data
                 cursor += 0x08
                 continue
+            if command == 0x11:  # SkyboxSettings, does not have pointer to data
+                skybox_id = self.rom.read_byte(cursor + 0x04)
+                skybox_config = self.rom.read_byte(cursor + 0x05)
+                skybox_mode = self.rom.read_byte(cursor + 0x06)
+                print(f'Warning: SCENE_CMD_SKYBOX_SETTINGS({skybox_id}, {skybox_config}, {skybox_mode}) looks like a pointer at offset 0x{cursor - self.start:08X} in {self.name}')
+                cursor += 0x08
+                continue
             if command == 0x18:  # AlternateHeaders
                 record = file.parse_alternate_headers(offset)
             elif command == 0x04:  # RoomList
@@ -596,12 +647,17 @@ class SceneDataRelocator(FileDataRelocator):
             elif command == 0x00:  # SpawnList
                 record = DataRecord(
                     self.rom, RecordType.SpawnList, file.start, offset, count * 0x10)
+            elif command == 0x01:  # ActorList
+                # Scene files do not typically have actor lists, but Gerudo's Fortress and Goron City do
+                print(f'Warning: Found actor list at offset 0x{offset:08X} in {self.name}')
+                record = DataRecord(
+                    self.rom, RecordType.ActorList, file.start, offset, count * 0x10)
             elif command == 0x13:  # ExitList
                 record = DataRecord(
                     self.rom, RecordType.ExitList, file.start, offset, -1)
             elif command == 0x0F:  # LightSettings
                 record = DataRecord(
-                    self.rom, RecordType.LightSettings, file.start, offset, -1)
+                    self.rom, RecordType.LightSettings, file.start, offset, align4(count * 0x16))
             elif command == 0x17:  # CutsceneData
                 record = DataRecord(
                     self.rom, RecordType.CutsceneData, file.start, offset, -1)
@@ -627,7 +683,7 @@ class SceneDataRelocator(FileDataRelocator):
                     self.rom, f'{self.name.replace("_scene", "_room")}_{i}', room_start, room_end, self))
             elif existing_room.end != room_end:
                 raise Exception(
-                    f'Existing room {existing_room.name} at 0x{existing_room.start:08X} does not match new room at 0x{room_start:08X}')
+                    f'Existing room {existing_room.name} at 0x{existing_room.start:08X} does not match new room at 0x{room_start:08X} in {self.name}')
             cursor += 0x08
         return DataRecord(self.rom, RecordType.RoomList, self.start, offset, cursor - rooms_start)
 
@@ -665,10 +721,17 @@ class RoomDataRelocator(FileDataRelocator):
             if file is None:  # Commands without pointers to data
                 cursor += 0x08
                 continue
+            if command == 0x10:  # TimeSettings, does not have pointer to data
+                time_hour = self.rom.read_byte(cursor + 0x04)
+                time_min = self.rom.read_byte(cursor + 0x05)
+                time_speed = self.rom.read_byte(cursor + 0x06)
+                print(f'Warning: SCENE_CMD_TIME_SETTINGS({time_hour}, {time_min}, {time_speed}) looks like a pointer at offset 0x{cursor - self.start:08X} in {self.name}')
+                cursor += 0x08
+                continue
             if command == 0x18:  # AlternateHeaders
                 record = file.parse_alternate_headers(offset)
-            elif command == 0x0A:  # RoomMesh
-                record = file.parse_room_mesh(offset)
+            elif command == 0x0A:  # MeshHeader
+                record = file.parse_mesh_header(offset)
             elif command == 0x0B:  # ObjectList
                 record = DataRecord(
                     self.rom, RecordType.ObjectList, file.start, offset, align4(count * 0x02))
@@ -699,7 +762,7 @@ class RoomDataRelocator(FileDataRelocator):
 # scene_table = 0x00BA0BB0 # for MQ
 def generate_scene_file_data_relocators(rom: Rom, scene_table=0x00B71440):
     actors = {}
-    for scene in range(0x00, 0x04):
+    for scene in range(0x00, 0x65):
         scene_start = rom.read_int32(scene_table + 0x00 + (scene * 0x14))
         entry = rom.dma.get_dmadata_record_by_key(scene_start)
         scene_data_relocator = SceneDataRelocator(
