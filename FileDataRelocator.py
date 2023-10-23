@@ -2,6 +2,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from enum import Enum
 from json import dump, dumps
+from os import makedirs, path
 from typing import Any, Optional, TypeVar
 
 from MQ import align4
@@ -249,7 +250,8 @@ class FileDataRelocator(ABC):
             record = self.data_records[index]
             next_record = self.data_records[index + 1]
             if record.length == -1:
-                record.length = next_record.offset - record.offset
+                self.adjust_record(record, record.offset,
+                                   next_record.offset - record.offset)
             index -= 1
 
     def check_for_overlapping_records(self) -> None:
@@ -262,7 +264,8 @@ class FileDataRelocator(ABC):
                     # We might parse records without count incorrectly depending on the data that comes next
                     print(
                         f'Warning: Overlapping records: {record.type.value} at offset 0x{record.offset:08X} and {next_record.type.value} at offset 0x{next_record.offset:08X} in {self.name}')
-                    self.adjust_record(record, record.offset, next_record.offset - record.offset)
+                    self.adjust_record(record, record.offset,
+                                       next_record.offset - record.offset)
                 else:
                     raise Exception(
                         f'Overlapping records: {record.type.value} at offset 0x{record.offset:08X} and {next_record.type.value} at offset 0x{next_record.offset:08X} in {self.name}')
@@ -594,7 +597,37 @@ class FileDataRelocator(ABC):
         self.parse_dlist_entry(offset + 0x08)
         return DataRecord(self.rom, RecordType.CullableEntry, self.start, offset, 0x10)
 
+    # Functions to transform the file
+
+    def transform_by_deduplicating_records(self) -> None:
+        # Deduplicate data records
+        i = 0
+        while i < len(self.data_records) - 1:
+            record = self.data_records[i]
+            if record.type == RecordType.Unknown:
+                i += 1
+                continue
+            j = i + 1
+            while j < len(self.data_records):
+                next_record = self.data_records[j]
+                if record.type == next_record.type and record.data == next_record.data:
+                    print(
+                        f'Identical records {record.type} at 0x{record.offset:08X} and 0x{next_record.offset:08X} in {self.name}')
+                    # Remove data record
+                    removed_record = self.data_records.pop(j)
+                    assert removed_record == next_record
+                    # Update pointer record to point to current data record
+                    pointer_record: Optional[PointerRecord] = next(
+                        (x for x in self.pointer_records if x.record == next_record), None)
+                    assert pointer_record is not None
+                    pointer_record.pointer = record.offset
+                    pointer_record.record = record
+                else:
+                    j += 1
+            i += 1
+
     # Return the file data as a serializable dict
+
     def to_json(self) -> dict[str, Any]:
         return {
             'name': self.name,
@@ -627,7 +660,8 @@ class SceneDataRelocator(FileDataRelocator):
                 skybox_id = self.rom.read_byte(cursor + 0x04)
                 skybox_config = self.rom.read_byte(cursor + 0x05)
                 skybox_mode = self.rom.read_byte(cursor + 0x06)
-                print(f'Warning: SCENE_CMD_SKYBOX_SETTINGS({skybox_id}, {skybox_config}, {skybox_mode}) looks like a pointer at offset 0x{cursor - self.start:08X} in {self.name}')
+                print(
+                    f'Warning: SCENE_CMD_SKYBOX_SETTINGS({skybox_id}, {skybox_config}, {skybox_mode}) looks like a pointer at offset 0x{cursor - self.start:08X} in {self.name}')
                 cursor += 0x08
                 continue
             if command == 0x18:  # AlternateHeaders
@@ -649,7 +683,8 @@ class SceneDataRelocator(FileDataRelocator):
                     self.rom, RecordType.SpawnList, file.start, offset, count * 0x10)
             elif command == 0x01:  # ActorList
                 # Scene files do not typically have actor lists, but Gerudo's Fortress and Goron City do
-                print(f'Warning: Found actor list at offset 0x{offset:08X} in {self.name}')
+                print(
+                    f'Warning: Found actor list at offset 0x{offset:08X} in {self.name}')
                 record = DataRecord(
                     self.rom, RecordType.ActorList, file.start, offset, count * 0x10)
             elif command == 0x13:  # ExitList
@@ -725,7 +760,8 @@ class RoomDataRelocator(FileDataRelocator):
                 time_hour = self.rom.read_byte(cursor + 0x04)
                 time_min = self.rom.read_byte(cursor + 0x05)
                 time_speed = self.rom.read_byte(cursor + 0x06)
-                print(f'Warning: SCENE_CMD_TIME_SETTINGS({time_hour}, {time_min}, {time_speed}) looks like a pointer at offset 0x{cursor - self.start:08X} in {self.name}')
+                print(
+                    f'Warning: SCENE_CMD_TIME_SETTINGS({time_hour}, {time_min}, {time_speed}) looks like a pointer at offset 0x{cursor - self.start:08X} in {self.name}')
                 cursor += 0x08
                 continue
             if command == 0x18:  # AlternateHeaders
@@ -767,7 +803,17 @@ def generate_scene_file_data_relocators(rom: Rom, scene_table=0x00B71440):
         entry = rom.dma.get_dmadata_record_by_key(scene_start)
         scene_data_relocator = SceneDataRelocator(
             rom, get_scene_name(scene), scene_start, entry.end)
-        with open(data_path(f'scenes/{scene_data_relocator.name}.json'), 'w') as outfile:
+        original_dir = data_path(f'scenes/original')
+        if not path.exists(original_dir):
+            makedirs(original_dir)
+        with open(path.join(original_dir, f'{scene_data_relocator.name}.json'), 'w') as outfile:
+            dump(scene_data_relocator, outfile,
+                 default=lambda x: x.to_json(), indent=2)
+        transformed_dir = data_path(f'scenes/transformed')
+        if not path.exists(transformed_dir):
+            makedirs(transformed_dir)
+        scene_data_relocator.transform_by_deduplicating_records()
+        with open(path.join(transformed_dir, f'{scene_data_relocator.name}.json'), 'w') as outfile:
             dump(scene_data_relocator, outfile,
                  default=lambda x: x.to_json(), indent=2)
     return actors
@@ -979,7 +1025,11 @@ def get_scene_name(scene: int) -> str:
     raise Exception(f'Unexpected scene {scene:02X}')
 
 
-# rom = Rom('ZOOTDEC.z64')
-# fully_mix_skulls(rom)
-rom = Rom('zeloot_mqdebug.z64')
-generate_scene_file_data_relocators(rom)
+def main() -> None:
+    # rom = Rom('ZOOTDEC.z64')
+    # fully_mix_skulls(rom)
+    rom = Rom('zeloot_mqdebug.z64')
+    generate_scene_file_data_relocators(rom)
+
+
+main()
