@@ -59,6 +59,34 @@ class RecordType(str, Enum):
     # Unknown data not referenced in scene and room files
     Unknown = 'Unknown'
 
+    # Record types referenced by header commands without count
+    def has_unknown_count(self) -> bool:
+        if self == RecordType.CollisionHeader:  # 0x03
+            return True
+        if self == RecordType.EntranceList:  # 0x06
+            return True
+        if self == RecordType.MeshHeader:  # 0x0A
+            return True
+        if self == RecordType.PathList:  # 0x0D
+            return True
+        if self == RecordType.ExitList:  # 0x13
+            return True
+        if self == RecordType.CutsceneData:  # 0x17
+            return True
+        if self == RecordType.AlternateHeaders:  # 0x18
+            return True
+        if self == RecordType.Polytypes:
+            return True
+        if self == RecordType.Cams:
+            return True
+        if self == RecordType.SetTImg:
+            return True
+        if self == RecordType.SetZImg:
+            return True
+        if self == RecordType.SetCImg:
+            return True
+        return False
+
 
 class DataRecord:
     def __init__(self, rom: Rom, type: RecordType, start: int, offset: int, length: int) -> None:
@@ -188,26 +216,36 @@ class FileDataRelocator(ABC):
                 # Merge next data record into current data record
                 record.length = next_record.offset + next_record.length - record.offset
                 removed_record = self.data_records.pop(index + 1)
-                assert removed_record == next_record
-                # Update pointer record to point to current data record
-                pointer_record: Optional[PointerRecord] = next(
-                    (x for x in self.pointer_records if x.record == next_record), None)
-                assert pointer_record is not None
-                pointer_record.record = record
+                assert removed_record is next_record
+                self.update_pointer_records(record, removed_record)
                 # Track record to align and read later
                 tracked_record = record
-            else:
-                # Align and adjust record
-                if tracked_record is not None:
-                    self.adjust_record(
-                        tracked_record, tracked_record.offset, align4(tracked_record.length))
-                    tracked_record = None
-                index += 1
+                continue
+            # Align and adjust record
+            if tracked_record is not None:
+                self.adjust_record(
+                    tracked_record, tracked_record.offset, align4(tracked_record.length))
+                tracked_record = None
+            index += 1
         # Align and adjust record
         if tracked_record is not None:
             self.adjust_record(
                 tracked_record, tracked_record.offset, align4(tracked_record.length))
             tracked_record = None
+
+    # Update pointer records that point to the removed record to point to the given record instead
+    def update_pointer_records(self, record: DataRecord, removed_record: DataRecord, additional_offset: Optional[int] = 0) -> None:
+        if isinstance(self, SceneDataRelocator):
+            all_pointer_records: list[PointerRecord] = [
+                y for x in [self, *self.rooms] for y in x.pointer_records]
+        else:
+            all_pointer_records: list[PointerRecord] = self.pointer_records
+        pointer_records: list[PointerRecord] = [
+            x for x in all_pointer_records if x.record is removed_record]
+        assert len(pointer_records) > 0
+        for pointer_record in pointer_records:
+            pointer_record.pointer = record.offset + additional_offset
+            pointer_record.record = record
 
     def can_merge(self, record: DataRecord, next_record: DataRecord) -> bool:
         if record.type == RecordType.CamPosData and next_record.type == RecordType.CamPosData:
@@ -260,7 +298,7 @@ class FileDataRelocator(ABC):
             record = self.data_records[i]
             next_record = self.data_records[i + 1]
             if record.offset + record.length > next_record.offset:
-                if self.is_record_of_unknown_count(record):
+                if record.type.has_unknown_count():
                     # We might parse records without count incorrectly depending on the data that comes next
                     print(
                         f'Warning: Overlapping records: {record.type.value} at offset 0x{record.offset:08X} and {next_record.type.value} at offset 0x{next_record.offset:08X} in {self.name}')
@@ -269,34 +307,6 @@ class FileDataRelocator(ABC):
                 else:
                     raise Exception(
                         f'Overlapping records: {record.type.value} at offset 0x{record.offset:08X} and {next_record.type.value} at offset 0x{next_record.offset:08X} in {self.name}')
-
-    # Record types referenced by header commands without count
-    def is_record_of_unknown_count(self, record: DataRecord) -> bool:
-        if record.type == RecordType.CollisionHeader:  # 0x03
-            return True
-        if record.type == RecordType.EntranceList:  # 0x06
-            return True
-        if record.type == RecordType.MeshHeader:  # 0x0A
-            return True
-        if record.type == RecordType.PathList:  # 0x0D
-            return True
-        if record.type == RecordType.ExitList:  # 0x13
-            return True
-        if record.type == RecordType.CutsceneData:  # 0x17
-            return True
-        if record.type == RecordType.AlternateHeaders:  # 0x18
-            return True
-        if record.type == RecordType.Polytypes:
-            return True
-        if record.type == RecordType.Cams:
-            return True
-        if record.type == RecordType.SetTImg:
-            return True
-        if record.type == RecordType.SetZImg:
-            return True
-        if record.type == RecordType.SetCImg:
-            return True
-        return False
 
     # Add unknown records between sorted records
     def add_unknown_records(self) -> None:
@@ -600,30 +610,31 @@ class FileDataRelocator(ABC):
     # Functions to transform the file
 
     def transform_by_deduplicating_records(self) -> None:
-        # Deduplicate data records
-        i = 0
+        i: int = 0
         while i < len(self.data_records) - 1:
             record = self.data_records[i]
+            # Ignore unknown records
             if record.type == RecordType.Unknown:
                 i += 1
                 continue
-            j = i + 1
+            # Iterate data records after the current one
+            j: int = i + 1
             while j < len(self.data_records):
                 next_record = self.data_records[j]
-                if record.type == next_record.type and record.data == next_record.data:
-                    print(
-                        f'Identical records {record.type} at 0x{record.offset:08X} and 0x{next_record.offset:08X} in {self.name}')
-                    # Remove data record
-                    removed_record = self.data_records.pop(j)
-                    assert removed_record == next_record
-                    # Update pointer record to point to current data record
-                    pointer_record: Optional[PointerRecord] = next(
-                        (x for x in self.pointer_records if x.record == next_record), None)
-                    assert pointer_record is not None
-                    pointer_record.pointer = record.offset
-                    pointer_record.record = record
-                else:
-                    j += 1
+                # Find matches
+                if record.type == next_record.type:
+                    index: int = record.data.find(next_record.data)
+                    # Partial matches are fine only if we know the count or the match goes to the end of the record
+                    if index != -1 and (not record.type.has_unknown_count() or index == len(record.data) - len(next_record.data)):
+                        print(
+                            f'\tMatching records {record.type} at 0x{record.offset + index:08X} and 0x{next_record.offset:08X} in {self.name}')
+                        # Remove data record
+                        removed_record = self.data_records.pop(j)
+                        assert removed_record is next_record
+                        self.update_pointer_records(
+                            record, removed_record, index)
+                        continue
+                j += 1
             i += 1
 
     # Return the file data as a serializable dict
@@ -796,27 +807,33 @@ class RoomDataRelocator(FileDataRelocator):
 
 # scene_table = 0x00B71440 # for Vanilla
 # scene_table = 0x00BA0BB0 # for MQ
-def generate_scene_file_data_relocators(rom: Rom, scene_table=0x00B71440):
-    actors = {}
+def generate_scene_file_data_relocators(rom: Rom, scene_table=0x00B71440) -> None:
     for scene in range(0x00, 0x65):
-        scene_start = rom.read_int32(scene_table + 0x00 + (scene * 0x14))
+        scene_name = get_scene_name(scene)
+        scene_start = rom.read_int32(scene_table + (scene * 0x14))
         entry = rom.dma.get_dmadata_record_by_key(scene_start)
+        scene_end = entry.end
+
+        print(
+            f'Parsing {scene_name} at 0x{scene_start:08X} - 0x{scene_end:08X}')
         scene_data_relocator = SceneDataRelocator(
-            rom, get_scene_name(scene), scene_start, entry.end)
+            rom, scene_name, scene_start, scene_end)
         original_dir = data_path(f'scenes/original')
         if not path.exists(original_dir):
             makedirs(original_dir)
         with open(path.join(original_dir, f'{scene_data_relocator.name}.json'), 'w') as outfile:
             dump(scene_data_relocator, outfile,
                  default=lambda x: x.to_json(), indent=2)
+
+        print(
+            f'Transforming {scene_name} at 0x{scene_start:08X} - 0x{scene_end:08X}')
+        scene_data_relocator.transform_by_deduplicating_records()
         transformed_dir = data_path(f'scenes/transformed')
         if not path.exists(transformed_dir):
             makedirs(transformed_dir)
-        scene_data_relocator.transform_by_deduplicating_records()
         with open(path.join(transformed_dir, f'{scene_data_relocator.name}.json'), 'w') as outfile:
             dump(scene_data_relocator, outfile,
                  default=lambda x: x.to_json(), indent=2)
-    return actors
 
 
 def get_scene_name(scene: int) -> str:
