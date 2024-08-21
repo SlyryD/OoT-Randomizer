@@ -1,0 +1,34 @@
+[
+    {
+        "region_name": "Fire Temple Lower",
+        "dungeon": "Fire Temple",
+        "locations": {
+            "Fire Temple GQ Near Boss Chest": "True",
+            "Fire Temple GQ Bottom Flare Dancer Chest": "True",
+            "Fire Temple GQ After Bottom Flare Dancer Chest": "True",
+            "Fire Temple GQ Big Lava Room Left Goron Chest": "True",
+            "Fire Temple GQ Big Lava Room Right Goron Chest": "True",
+            "Fire Temple GQ Map Chest": "True",
+            "Fire Temple GQ Compass Room Chest": "True",
+            "Fire Temple GQ Upper Lava Room Chest": "True",
+            "Fire Temple GQ Shortcut Room Chest": "True",
+            "Fire Temple GQ Falling Tile Room Chest": "True",
+            "Fire Temple GQ Fire Wall Maze Center Room Chest": "True",
+            "Fire Temple GQ Fire Wall Maze Side Room Chest": "True",
+            "Fire Temple GQ Room Boss Key Chest": "True",
+            "Fire Temple GQ Room Shortcut Room Cow": "True",
+            "Fire Temple GQ Compass Room Cow": "True",
+            "Fire Temple GQ GS After Bottom Flare Dancer": "True",
+            "Fire Temple GQ GS Song of Time Room": "True",
+            "Fire Temple GQ GS Upper Lava Room": "True",
+            "Fire Temple GQ GS Boulder Maze Room": "True",
+            "Fire Temple GQ GS Fire Wall Maze": "True",
+            "Fire Temple GQ GS After Top Flare Dancer": "True",
+            "Fire Temple GQ GS Room Boss Key Chest Room": "True",
+            "Fire Temple GQ GS Falling Staircase Room": "True"
+        },
+        "exits": {
+            "Fire Temple Boss Door": "True"
+        }
+    }
+]

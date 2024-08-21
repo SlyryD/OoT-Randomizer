@@ -38,9 +38,11 @@ def distribute_items_restrictive(worlds: list[World], fill_locations: Optional[l
             'Spirit Temple Twinrova Heart', 'Shadow Temple Bongo Bongo Heart',
             'Sheik in Ice Cavern', 'Song from Impa',
             'Gerudo Training Ground MQ Ice Arrows Chest',
+            'Gerudo Training Ground GQ Iron Knuckle Elevator Chest',
             'Gerudo Training Ground Maze Path Final Chest',
             'Bottom of the Well Lens of Truth Chest',
-            'Bottom of the Well MQ Lens of Truth Chest']
+            'Bottom of the Well MQ Lens of Truth Chest',
+            'Bottom of the Well GQ Dead Hand Chest']
     else:
         song_location_names = []
 

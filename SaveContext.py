@@ -1,3 +1,4 @@
+# TODO.GQ
 from __future__ import annotations
 import sys
 from collections.abc import Callable, Iterable
@@ -16,30 +17,6 @@ if TYPE_CHECKING:
 AddressesDict: TypeAlias = "dict[str, Address | dict[str, Address | dict[str, Address]]]"
 
 
-class Scenes(IntEnum):
-    # Dungeons
-    DEKU_TREE = 0x00
-    DODONGOS_CAVERN = 0x01
-    KING_DODONGO_LOBBY = 0x12
-    JABU_JABU = 0x02
-    FOREST_TEMPLE = 0x03
-    FIRE_TEMPLE = 0x04
-    WATER_TEMPLE = 0x05
-    SPIRIT_TEMPLE = 0x06
-    SHADOW_TEMPLE = 0x07
-    # Bean patch scenes
-    GRAVEYARD = 0x53
-    ZORAS_RIVER = 0x54
-    KOKIRI_FOREST = 0x55
-    LAKE_HYLIA = 0x57
-    GERUDO_VALLEY = 0x5A
-    LOST_WOODS = 0x5B
-    DESERT_COLOSSUS = 0x5C
-    DEATH_MOUNTAIN_TRAIL = 0x60
-    DEATH_MOUNTAIN_CRATER = 0x61
-    GORON_CITY = 0x62
-
-
 class FlagType(IntEnum):
     CHEST = 0x00
     SWITCH = 0x01
@@ -48,6 +25,25 @@ class FlagType(IntEnum):
     UNK00 = 0x04 # 0x04 unused
     VISITED_ROOM = 0x05
     VISITED_FLOOR = 0x06
+
+
+# small key counts for vanilla, mq, and gq dungeons
+key_counts: dict[str, tuple[int, int, int]] = {
+    'Deku Tree': [0, 0, 0],
+    'Dodongos Cavern': [0, 0, 0],
+    'Jabu Jabus Belly': [0, 0, 0],
+    'Forest Temple': [5, 6, 5],
+    'Fire Temple': [8, 5, 6],
+    'Water Temple': [6, 2, 6],
+    'Spirit Temple': [5, 7, 7],
+    'Shadow Temple': [5, 6, 6],
+    'Bottom of the Well': [3, 2, 4],
+    'Ice Cavern': [0, 0, 0],
+    'Ganons Tower': [0, 0, 0],
+    'Gerudo Training Ground': [9, 3, 5],
+    'Thieves Hideout': [4, 4, 4],
+    'Ganons Castle': [2, 3, 6],
+}
 
 
 class Address:
@@ -360,40 +356,40 @@ class SaveContext:
                 dungeon = item[:-1].split(' (', 1)[1]
                 save_writes = {
                     "Forest Temple"          : {
-                        'keys.forest': 6 if world.dungeon_mq[dungeon] else 5,
-                        'total_keys.forest': 6 if world.dungeon_mq[dungeon] else 5,
+                        'keys.forest': key_counts["Forest Temple"][world.dungeon_mq[dungeon]],
+                        'total_keys.forest': key_counts["Forest Temple"][world.dungeon_mq[dungeon]],
                     },
                     "Fire Temple"            : {
-                        'keys.fire': 5 if world.dungeon_mq[dungeon] else 8,
-                        'total_keys.fire': 5 if world.dungeon_mq[dungeon] else 8,
+                        'keys.fire': key_counts["Fire Temple"][world.dungeon_mq[dungeon]],
+                        'total_keys.fire': key_counts["Fire Temple"][world.dungeon_mq[dungeon]],
                     },
                     "Water Temple"           : {
-                        'keys.water': 2 if world.dungeon_mq[dungeon] else 6,
-                        'total_keys.water': 2 if world.dungeon_mq[dungeon] else 6,
+                        'keys.water': key_counts["Water Temple"][world.dungeon_mq[dungeon]],
+                        'total_keys.water': key_counts["Water Temple"][world.dungeon_mq[dungeon]],
                     },
                     "Spirit Temple"          : {
-                        'keys.spirit': 7 if world.dungeon_mq[dungeon] else 5,
-                        'total_keys.spirit': 7 if world.dungeon_mq[dungeon] else 5,
+                        'keys.spirit': key_counts["Spirit Temple"][world.dungeon_mq[dungeon]],
+                        'total_keys.spirit': key_counts["Spirit Temple"][world.dungeon_mq[dungeon]],
                     },
                     "Shadow Temple"          : {
-                        'keys.shadow': 6 if world.dungeon_mq[dungeon] else 5,
-                        'total_keys.shadow': 6 if world.dungeon_mq[dungeon] else 5,
+                        'keys.shadow': key_counts["Shadow Temple"][world.dungeon_mq[dungeon]],
+                        'total_keys.shadow': key_counts["Shadow Temple"][world.dungeon_mq[dungeon]],
                     },
                     "Bottom of the Well"     : {
-                        'keys.botw': 2 if world.dungeon_mq[dungeon] else 3,
-                        'total_keys.botw': 2 if world.dungeon_mq[dungeon] else 3,
+                        'keys.botw': key_counts["Bottom of the Well"][world.dungeon_mq[dungeon]],
+                        'total_keys.botw': key_counts["Bottom of the Well"][world.dungeon_mq[dungeon]],
                     },
                     "Gerudo Training Ground" : {
-                        'keys.gtg': 3 if world.dungeon_mq[dungeon] else 9,
-                        'total_keys.gtg': 3 if world.dungeon_mq[dungeon] else 9,
+                        'keys.gtg': key_counts["Gerudo Training Ground"][world.dungeon_mq[dungeon]],
+                        'total_keys.gtg': key_counts["Gerudo Training Ground"][world.dungeon_mq[dungeon]],
                     },
                     "Thieves Hideout"        : {
-                        'keys.fortress': 4,
-                        'total_keys.fortress': 4,
+                        'keys.fortress': key_counts["Thieves Hideout"][world.dungeon_mq[dungeon]],
+                        'total_keys.fortress': key_counts["Thieves Hideout"][world.dungeon_mq[dungeon]],
                     },
                     "Ganons Castle"          : {
-                        'keys.gc': 3 if world.dungeon_mq[dungeon] else 2,
-                        'total_keys.gc': 3 if world.dungeon_mq[dungeon] else 2,
+                        'keys.gc': key_counts["Ganons Castle"][world.dungeon_mq[dungeon]],
+                        'total_keys.gc': key_counts["Ganons Castle"][world.dungeon_mq[dungeon]],
                     },
                     "Treasure Chest Game"    : {
                         'keys.tcg': 6,
@@ -1223,6 +1219,7 @@ class SaveContext:
         "Ocarina C down Button"     : {'Ocarina_C_down_Button': True},
         "Ocarina C left Button"     : {'Ocarina_C_left_Button': True},
         "Ocarina C right Button"    : {'Ocarina_C_right_Button': True},
+        "Boss Key (Dodongos Cavern)"              : {'dungeon_items.dodongo.boss_key': True},
         "Boss Key (Forest Temple)"                : {'dungeon_items.forest.boss_key': True},
         "Boss Key (Fire Temple)"                  : {'dungeon_items.fire.boss_key': True},
         "Boss Key (Water Temple)"                 : {'dungeon_items.water.boss_key': True},

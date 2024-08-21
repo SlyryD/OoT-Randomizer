@@ -1,0 +1,17 @@
+[
+    {
+        "region_name": "Gerudo Training Ground Lobby",
+        "dungeon": "Gerudo Training Ground",
+        "locations": {
+            "Gerudo Training Ground GQ Maze Chest": "True",
+            "Gerudo Training Ground GQ Defeat Enemies Chest": "True",
+            "Gerudo Training Ground GQ Iron Knuckle Elevator Chest": "True",
+            "Gerudo Training Ground GQ Rolling Boulder Freestanding Key": "True",
+            "Gerudo Training Ground GQ Maze Freestanding PoH": "True",
+            "Gerudo Training Ground GQ Above Maze Freestanding Key": "True"
+        },
+        "exits": {
+            "Gerudo Fortress": "True"
+        }
+    }
+]

@@ -1,0 +1,30 @@
+[
+    {
+        "region_name": "Bottom of the Well",
+        "dungeon": "Bottom of the Well",
+        "locations": {
+            "Bottom of the Well GQ Front Center Bombable Chest": "True",
+            "Bottom of the Well GQ Front Left Fake Wall Chest": "True",
+            "Bottom of the Well GQ Center Cage Chest": "True",
+            "Bottom of the Well GQ Basement North Chest": "True",
+            "Bottom of the Well GQ Map Chest": "True",
+            "Bottom of the Well GQ Compass Chest": "True",
+            "Bottom of the Well GQ Basement South Chest": "True",
+            "Bottom of the Well GQ Holes Room Chest": "True",
+            "Bottom of the Well GQ Dead Hand Chest": "True",
+            "Bottom of the Well GQ Coffin Freestanding Key": "True",
+            "Bottom of the Well GQ Basement Freestanding Key": "True",
+            "Bottom of the Well GQ GS Before Dead Hand": "True",
+            "Bottom of the Well GQ GS Back Left": "True",
+            "Bottom of the Well GQ GS Before Holes Room": "True",
+            "Bottom of the Well GQ GS Center Cage": "True",
+            "Bottom of the Well GQ GS Coffin Room": "True",
+            "Bottom of the Well GQ GS Holes Room": "True",
+            "Bottom of the Well GQ GS East Inner Room": "True",
+            "Bottom of the Well GQ GS West Inner Room": "True"
+        },
+        "exits": {
+            "Kakariko Village": "True"
+        }
+    }
+]

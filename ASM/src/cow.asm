@@ -4,8 +4,8 @@ cow_item_hook:
     addiu   a2, r0, 0x50 ; Give milk if cows are not randomized
     beqz    t0, @@return
     nop
-    lh      a2, 0x014 (a0) ; Load cow id (1 or 2)
-    beqzl   a2, @@return ; If the cow ID is zero, this cow should not give an item, so give milk
+    lb      a2, 0x015 (a0) ; Load cow ID (0 for non-shuffled cows, otherwise 1, 2, etc. for each scene)
+    beqzl   a2, @@return ; If the cow ID is 0, this cow should not give an item, so give milk
     addiu   a2, r0, 0x50
     lb      t0, 0x1D44 (a1) ; Load scene collect flag
     and     t3, a2, t0
@@ -27,7 +27,7 @@ cow_bottle_check:
     lb      t0, SHUFFLE_COWS
     beqz    t0, @@bottle_check
     nop
-    lh      t0, 0x014 (s0)
+    lb      t0, 0x015 (s0)
     beqz    t0, @@bottle_check ; If this cow doesnt give an item, check for bottle
     nop
     lb      t1, 0x1D44 (s1)
@@ -48,7 +48,7 @@ cow_bottle_check:
 
 cow_after_init:
     lw      s0, 0x0034 (sp) ; Displaced
-    lh      t0, 0xB4 (a0)
+    lb      t0, 0xB5 (a0) ; Read cow ID from ActorShape data
     beqz    t0, @@return
     nop
     sh      r0, 0xB0 (a0)

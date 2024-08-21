@@ -13,7 +13,7 @@ The starting address of the auto-tracker context is listed at address `0x8040_00
 |`0x14`|`CFG_DUNGEON_INFO_REWARD_NEED_COMPASS`|1|`0x04`|Defines which item is required to display the location of a dungeon reward in the pause menu. `0` = no item required, `1` = the compass of the dungeon in which the reward is found, `2` = the compass of the reward's vanilla dungeon. For example, if the Kokiri Emerald is in the Fire Temple, `1` means the Fire Temple compass is required and `2` means the Deku Tree compass is required.|
 |`0x18`|`CFG_DUNGEON_INFO_REWARD_NEED_ALTAR`|1|`0x04`|`1` if the reward info should only be displayed for rewards whose Temple of Time altar text boxes have been read.|
 |`0x1C`|`CFG_DUNGEON_REWARDS`|1|`0x0E`|A byte representing the medallion or stone for each dungeon. Dungeons without rewards are listed as `0xFF`, and one reward is chosen arbitrarily if the dungeon has multiple rewards. For more complete data, use `CFG_DUNGEON_REWARD_AREAS` instead.|
-|`0x2A`|`CFG_DUNGEON_IS_MQ`|1|`0x0E`|A byte set to `1` for each dungeon in Master Quest mode.|
+|`0x2A`|`CFG_DUNGEON_IS_MQ`|1|`0x0E`|A byte set to `1` for each dungeon in Master Quest mode or `2` for each dungeon in Gold Quest mode.|
 |`0x38`|`RAINBOW_BRIDGE_CONDITION`|2|`0x04`|The condition for spawning the rainbow bridge. `0` = open, `1` = medallions, `2` = dungeon rewards, `3` = stones, `4` = vanilla, `5` = tokens, `6` = hearts.|
 |`0x3C`|`LACS_CONDITION`|2|`0x04`|The condition for triggering the light arrow cutscene. `0` = vanilla, `1` = medallions, `2` = dungeons, `3` = stones, `4` = tokens, `5` = hearts.|
 |`0x40`|`RAINBOW_BRIDGE_COUNT`|2|`0x02`|The number of items (of the kind defined in `RAINBOW_BRIDGE_CONDITION`) required to spawn the rainbow bridge.|

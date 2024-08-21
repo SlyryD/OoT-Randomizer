@@ -1,3 +1,4 @@
+# TODO.GQ
 from __future__ import annotations
 import random
 from collections.abc import Callable, Collection
@@ -517,6 +518,8 @@ hintTable: dict[str, tuple[list[str] | str, Optional[str], str | list[str]]] = {
     'Bombs (5)':                                                (["a few explosives", "a few blast balls"], "Bombs (5 pieces)", 'item'),
     'Bombs (10)':                                               (["some explosives", "some blast balls"], "Bombs (10 pieces)", 'item'),
     'Bombs (20)':                                               (["lots-o-explosives", "plenty of blast balls"], "Bombs (20 pieces)", 'item'),
+    'Bombs (30)':                                               (["lots-o-explosives", "plenty of blast balls"], "Bombs (30 pieces)", 'item'),
+    'Large Magic Jar':                                          (["a vial of mojo", "a wizardly receptacle", "an urn of sorcery"], "a Large Magic Jar", 'item'),
     'Ice Trap':                                                 (["a gift from Ganon", "a chilling discovery", "frosty fun"], "an Ice Trap", 'item'),
     'Magic Bean':                                               (["a wizardly legume"], "a Magic Bean", 'item'),
     'Buy Magic Bean':                                           (["a wizardly legume"], "a Magic Bean", 'item'),
@@ -620,6 +623,8 @@ hintTable: dict[str, tuple[list[str] | str, Optional[str], str | list[str]]] = {
     'Ice Cavern MQ Iron Boots Chest':                              ("a #monster in a frozen cavern# guards", "the #final treasure of Ice Cavern# is", ['dungeon', 'sometimes']),
     'Ganons Castle Shadow Trial Golden Gauntlets Chest':           ("#deep in the test of darkness# lies", "a #like-like in Ganon's Shadow Trial# guards", ['dungeon', 'sometimes']),
     'Ganons Castle MQ Shadow Trial Eye Switch Chest':              ("#deep in the test of darkness# lies", "shooting an #eye switch in Ganon's Shadow Trial# reveals", ['dungeon', 'sometimes']),
+
+    # TODO.GQ: Add GQ hints
 
     'Deku Theater Rewards':                                        ("the #Skull Mask and Mask of Truth# reward...^", None, 'dual'),
     'HF Ocarina of Time Retrieval':                                ("during her escape, #Princess Zelda# entrusted you with both...^", "the #Ocarina of Time# rewards both...^", 'dual'),

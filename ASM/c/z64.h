@@ -1014,7 +1014,16 @@ typedef struct {
 
 typedef struct {
   z64_actor_t  common;               /* 0x0000 */
-  char         unk_00_[0x0013];      /* 0x013C */
+  int8_t       current_tunic;        /* 0x013C */
+  int8_t       current_sword_item_id;/* 0x013D */
+  int8_t       current_shield;       /* 0x013E */
+  int8_t       current_boots;        /* 0x013F */
+  int8_t       held_item_button;     /* 0x0140 */
+  int8_t       held_item_action;     /* 0x0141 */
+  uint8_t      held_item_id;         /* 0x0142 */
+  int8_t       prev_boots;           /* 0x0143 */
+  int8_t       item_action;          /* 0x0144 */
+  char         unk_00_[0x000A];      /* 0x0145 */
   uint8_t      current_mask;         /* 0x014F */
   char         unk_01_[0x02D4];      /* 0x0150 */
   int8_t       incoming_item_id;     /* 0x0424 */
@@ -1981,6 +1990,10 @@ typedef enum {
 #define z64_Math_SinS_addr                      0x800636C4
 #define z64_RandSeed_addr                       0x800CDCC0
 #define z64_Rand_ZeroOne_addr                   0x800CDCCC
+#define z64_Math_AsymStepToF_addr               0x80063ACC
+#define z64_LinkSetBootData_addr                0x80079200
+#define z64_LinkDrawHookshotReticle_addr        0x8007B560
+#define z64_InterfaceDrawItemIconTexture_addr   0x800748DC
 #define Interface_LoadItemIcon1_addr            0x8006FB50
 #define Rupees_ChangeBy_addr                    0x800721CC
 #define Message_ContinueTextbox_addr            0x800DCE80
@@ -2067,6 +2080,11 @@ typedef int32_t (*z64_ActorOfferGetItem_proc)(z64_actor_t* actor, z64_game_t* ga
 typedef void(*z64_RandSeed_proc) (uint32_t seed);
 typedef float(*z64_Rand_ZeroOne_proc)();
 typedef void(*Font_LoadChar_proc)(void* font, uint8_t character, uint16_t codePointIndex);
+
+typedef int32_t(*z64_Math_AsymStepToF_proc) (float* value, float target, float incr_step, float decr_step);
+typedef void(*z64_LinkSetBootData_proc) (z64_game_t* game, z64_link_t* link);
+typedef void(*z64_LinkDrawHookshotReticle_proc) (z64_game_t* game, z64_link_t* link, float z_component);
+typedef void(*z64_InterfaceDrawItemIconTexture_proc) (z64_game_t* game, void* texture, uint16_t button);
 
 typedef void(*Interface_LoadItemIcon1_proc) (z64_game_t* game, uint16_t button);
 
@@ -2172,6 +2190,11 @@ typedef void(*z64_Play_SetupRespawnPoint_proc)(z64_game_t *game, int32_t respawn
 #define z64_ScalePitchAndTempo        ((z64_ScalePitchAndTempo_proc)z64_ScalePitchAndTempo_addr)
 #define z64_Audio_GetActiveSeqId ((z64_Audio_GetActiveSeqId_proc)z64_Audio_GetActiveSeqId_addr)
 #define z64_Play_SetupRespawnPoint ((z64_Play_SetupRespawnPoint_proc)z64_Play_SetupRespawnPoint_addr)
+
+#define z64_Math_AsymStepToF    ((z64_Math_AsymStepToF_proc)z64_Math_AsymStepToF_addr)
+#define z64_LinkSetBootData     ((z64_LinkSetBootData_proc)z64_LinkSetBootData_addr)
+#define z64_LinkDrawHookshotReticle ((z64_LinkDrawHookshotReticle_proc)z64_LinkDrawHookshotReticle_addr)
+#define z64_InterfaceDrawItemIconTexture ((z64_InterfaceDrawItemIconTexture_proc)z64_InterfaceDrawItemIconTexture_addr)
 
 #define PlaySFX ((PlaySFX_proc)PlaySFX_addr)
 #define Font_LoadChar ((Font_LoadChar_proc)Font_LoadChar_addr)

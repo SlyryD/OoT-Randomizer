@@ -6,9 +6,9 @@ import os
 import random
 from collections import OrderedDict, defaultdict
 from collections.abc import Iterable, Iterator
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
-from Dungeon import Dungeon
+from Dungeon import Dungeon, DungeonType
 from Entrance import Entrance
 from Goals import Goal, GoalCategory
 from HintList import get_required_hints, misc_item_hint_table, misc_location_hint_table
@@ -144,19 +144,20 @@ class World:
         self.empty_dungeons: dict[str, EmptyDungeons.EmptyDungeonInfo] = EmptyDungeons()
 
         # dungeon forms will be decided later
-        self.dungeon_mq: dict[str, bool] = {
-            'Deku Tree': False,
-            'Dodongos Cavern': False,
-            'Jabu Jabus Belly': False,
-            'Bottom of the Well': False,
-            'Ice Cavern': False,
-            'Gerudo Training Ground': False,
-            'Forest Temple': False,
-            'Fire Temple': False,
-            'Water Temple': False,
-            'Spirit Temple': False,
-            'Shadow Temple': False,
-            'Ganons Castle': False,
+        self.dungeon_mq: dict[str, DungeonType] = {
+            'Deku Tree': DungeonType.VANILLA,
+            'Dodongos Cavern': DungeonType.VANILLA,
+            'Jabu Jabus Belly': DungeonType.VANILLA,
+            'Forest Temple': DungeonType.VANILLA,
+            'Fire Temple': DungeonType.VANILLA,
+            'Water Temple': DungeonType.VANILLA,
+            'Spirit Temple': DungeonType.VANILLA,
+            'Shadow Temple': DungeonType.VANILLA,
+            'Bottom of the Well': DungeonType.VANILLA,
+            'Ice Cavern': DungeonType.VANILLA,
+            'Gerudo Training Ground': DungeonType.VANILLA,
+            'Thieves Hideout': DungeonType.VANILLA,
+            'Ganons Castle': DungeonType.VANILLA,
         }
 
         if resolve_randomized_settings:
@@ -287,6 +288,7 @@ class World:
         self.max_progressions['Rutos Letter'] = 2
 
         # Available Gold Skulltula Tokens in world. Set to proper value in ItemPool.py.
+        # TODO.GQ: New default?
         self.available_tokens: int = 100
 
         # Disable goal hints if the hint distro does not require them.
@@ -492,10 +494,12 @@ class World:
             if trial not in chosen_trials and trial not in dist_chosen:
                 self.skipped_trials[trial] = True
 
-        # Determine empty and MQ Dungeons (avoid having both empty & MQ dungeons unless necessary)
+
+        # Determine MQ, GQ, and empty dungeons
         mq_dungeon_pool = list(self.dungeon_mq)
+        gq_dungeon_pool = list(self.dungeon_mq)
         empty_dungeon_pool = list(self.empty_dungeons)
-        dist_num_mq, dist_num_empty = self.distribution.configure_dungeons(self, mq_dungeon_pool, empty_dungeon_pool)
+        dist_num_mq, dist_num_gq, dist_num_empty = self.distribution.configure_dungeons(self, mq_dungeon_pool, gq_dungeon_pool, empty_dungeon_pool)
 
         if self.settings.empty_dungeons_mode == 'specific':
             for dung in self.settings.empty_dungeons_specific:
@@ -503,54 +507,87 @@ class World:
 
         if self.settings.mq_dungeons_mode == 'specific':
             for dung in self.settings.mq_dungeons_specific:
-                self.dungeon_mq[dung] = True
+                self.dungeon_mq[dung] = DungeonType.MQ
+            for dung in self.settings.gq_dungeons_specific:
+                self.dungeon_mq[dung] = DungeonType.GQ
 
-        if self.settings.empty_dungeons_mode == 'count':
-            nb_to_pick = self.settings.empty_dungeons_count - dist_num_empty
+        def handle_dungeons_count(dungeon_type: str, dungeons_count: int, dist_pool: list[str], dist_num: int, priority_lambda: Callable[[str], bool], pick: Callable[[str], None]):
+            nb_to_pick = dungeons_count - dist_num
             if nb_to_pick < 0:
-                raise RuntimeError(f"{dist_num_empty} dungeons are set to empty on world {self.id+1}, but only {self.settings.empty_dungeons_count} empty dungeons allowed")
-            if len(empty_dungeon_pool) < nb_to_pick:
-                non_empty = 8 - dist_num_empty - len(empty_dungeon_pool)
-                raise RuntimeError(f"On world {self.id+1}, {dist_num_empty} dungeons are set to empty and {non_empty} to non-empty. Can't reach {self.settings.empty_dungeons_count} empty dungeons.")
+                raise RuntimeError(f"{dist_num} dungeons are set to {dungeon_type} on world {self.id+1}, but only {dungeons_count} {dungeon_type} dungeons allowed")
+            if len(dist_pool) < nb_to_pick:
+                non_type = 12 - dist_num - len(dist_pool)
+                raise RuntimeError(f"On world {self.id+1}, {dist_num} dungeons are set to {dungeon_type} and {non_type} to non-{dungeon_type}. Can't reach {dungeons_count} {dungeon_type} dungeons.")
 
-            # Prioritize non-MQ dungeons
-            non_mq, mq = [], []
-            for dung in empty_dungeon_pool:
-                (mq if self.dungeon_mq[dung] else non_mq).append(dung)
-            for dung in random.sample(non_mq, min(nb_to_pick, len(non_mq))):
-                self.empty_dungeons[dung].empty = True
+            priority, nonpriority = [], []
+            for dung in dist_pool:
+                (priority if priority_lambda(dung) else nonpriority).append(dung)
+            for dung in random.sample(priority, min(nb_to_pick, len(priority))):
+                pick(dung)
                 nb_to_pick -= 1
             if nb_to_pick > 0:
-                for dung in random.sample(mq, nb_to_pick):
-                    self.empty_dungeons[dung].empty = True
+                for dung in random.sample(nonpriority, nb_to_pick):
+                    pick(dung)
 
-        if self.settings.mq_dungeons_mode == 'random' and 'mq_dungeons_count' not in dist_keys:
+        # TODO.GQ: Set Thieves Hideout for GQ overworld
+
+        if self.settings.empty_dungeons_mode == 'count':
+            def pick_empty(dung: str) -> None:
+                self.empty_dungeons[dung].empty = True
+            handle_dungeons_count(
+                'empty',
+                self.settings.empty_dungeons_count,
+                empty_dungeon_pool,
+                dist_num_empty,
+                # Prioritize vanilla dungeons
+                lambda dung: self.dungeon_mq[dung] == DungeonType.VANILLA,
+                pick_empty
+            )
+
+        choices = [DungeonType.VANILLA]
+        if self.settings.mq_dungeons_mode == 'random':
+            if self.settings.mq_dungeons_random and 'mq_dungeons_count' not in dist_keys:
+                choices.append(DungeonType.MQ)
+                self.randomized_list.append('mq_dungeons_count')
+            if self.settings.gq_dungeons_random and 'gq_dungeons_count' not in dist_keys:
+                choices.append(DungeonType.GQ)
+                self.randomized_list.append('gq_dungeons_count')
+
+        if len(choices) > 1:
             for dungeon in mq_dungeon_pool:
                 self.dungeon_mq[dungeon] = random.choice([True, False])
             self.randomized_list.append('mq_dungeons_count')
-        elif self.settings.mq_dungeons_mode in ('mq', 'vanilla'):
+        elif self.settings.mq_dungeons_mode in ('gq', 'mq', 'vanilla'):
             for dung in self.dungeon_mq.keys():
-                self.dungeon_mq[dung] = (self.settings.mq_dungeons_mode == 'mq')
+                self.dungeon_mq[dung] = DungeonType.MQ if (self.settings.mq_dungeons_mode == 'mq') else DungeonType.GQ if (
+                    self.settings.mq_dungeons_mode == 'gq') else DungeonType.VANILLA
         elif self.settings.mq_dungeons_mode != 'specific':
-            nb_to_pick = self.settings.mq_dungeons_count - dist_num_mq
-            if nb_to_pick < 0:
-                raise RuntimeError("%d dungeons are set to MQ on world %d, but only %d MQ dungeons allowed." % (dist_num_mq, self.id+1, self.settings.mq_dungeons_count))
-            if len(mq_dungeon_pool) < nb_to_pick:
-                non_mq = 8 - dist_num_mq - len(mq_dungeon_pool)
-                raise RuntimeError(f"On world {self.id+1}, {dist_num_mq} dungeons are set to MQ and {non_mq} to non-MQ. Can't reach {self.settings.mq_dungeons_count} MQ dungeons.")
+            # TODO.GQ: Check this case
+            def pick_mq(dung: str) -> None:
+                self.mq_dungeons[dung] = DungeonType.MQ
+            handle_dungeons_count(
+                'mq',
+                self.settings.mq_dungeons_count,
+                mq_dungeon_pool,
+                dist_num_mq,
+                # Prioritize non-empty dungeons
+                lambda dung: not self.empty_dungeons[dung].empty,
+                pick_mq
+            )
+            def pick_gq(dung: str) -> None:
+                self.gq_dungeons[dung] = DungeonType.GQ
+            handle_dungeons_count(
+                'gq',
+                self.settings.gq_dungeons_count,
+                gq_dungeon_pool,
+                dist_num_gq,
+                # Prioritize non-empty dungeons
+                lambda dung: not self.empty_dungeons[dung].empty,
+                pick_gq
+            )
 
-            # Prioritize non-empty dungeons
-            non_empty, empty = [], []
-            for dung in mq_dungeon_pool:
-                (empty if self.empty_dungeons[dung].empty else non_empty).append(dung)
-            for dung in random.sample(non_empty, min(nb_to_pick, len(non_empty))):
-                self.dungeon_mq[dung] = True
-                nb_to_pick -= 1
-            if nb_to_pick > 0:
-                for dung in random.sample(empty, nb_to_pick):
-                    self.dungeon_mq[dung] = True
-
-        self.settings.mq_dungeons_count = list(self.dungeon_mq.values()).count(True)
+        self.settings.mq_dungeons_count = list(self.dungeon_mq.values()).count(DungeonType.MQ)
+        self.settings.gq_dungeons_count = list(self.dungeon_mq.values()).count(DungeonType.GQ)
         self.distribution.configure_randomized_settings(self)
 
         # Determine puzzles with silver rupee pouches
@@ -632,7 +669,7 @@ class World:
         for hint_area in HintArea:
             if (name := hint_area.dungeon_name) is not None:
                 logic_folder = 'Glitched World' if self.settings.logic_rules == 'glitched' else 'World'
-                file_name = name + (' MQ.json' if self.dungeon_mq[name] else '.json')
+                file_name = name + (' MQ.json' if self.dungeon_mq[name] == DungeonType.MQ else ' GQ.json' if self.dungeon_mq[name] == DungeonType.GQ else '.json')
                 savewarps_to_connect += self.load_regions_from_json(os.path.join(data_path(logic_folder), file_name))
                 self.dungeons.append(Dungeon(self, name, hint_area))
         return savewarps_to_connect

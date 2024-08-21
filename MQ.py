@@ -31,7 +31,7 @@
 # The total size consumed by the object file data is NUM_OBJECTS * 0x02, aligned to
 # the nearest 0x04 bytes
 #
-# Actor spawn data will be appended to the end of the room file, after the objects.
+# Objects and actor spawn data will be appended to the end of the room file if needed.
 # The total size consumed by the actor spawn data is NUM_ACTORS * 0x10
 #
 # Finally:
@@ -44,12 +44,17 @@
 # As such, if the file moves, the patch will break.
 
 from __future__ import annotations
+from collections.abc import Callable
+from itertools import chain, combinations
 import json
 from struct import pack, unpack
-from typing import Optional, Any
+from typing import Any, Iterator, Optional
 
+from Dungeon import DungeonType
+from ntype import uint16, uint32
 from Rom import Rom
 from Utils import data_path
+from World import World
 
 SCENE_TABLE: int = 0xB71440
 
@@ -69,9 +74,12 @@ class File:
     def from_json(cls, file: dict[str, Optional[str]]) -> File:
         return cls(
             file['Name'],
-            int(file['Start'], 16) if file.get('Start', None) is not None else 0,
-            int(file['End'], 16) if file.get('End', None) is not None else None,
-            int(file['RemapStart'], 16) if file.get('RemapStart', None) is not None else None
+            int(file['Start'], 16) if file.get(
+                'Start', None) is not None else 0,
+            int(file['End'], 16) if file.get(
+                'End', None) is not None else None,
+            int(file['RemapStart'], 16) if file.get(
+                'RemapStart', None) is not None else None
         )
 
     def __repr__(self) -> str:
@@ -100,32 +108,202 @@ class File:
         self.relocate(rom)
 
 
+class CollisionDataRecord:
+    def __init__(self, num: int, addr: int, size: int, data: bytearray) -> None:
+        self.num: int = num
+        self.addr: int = addr
+        self.size: int = size
+        self.data: bytearray = data
+
+
+class CollisionData:
+    def __init__(self, mesh: CollisionMesh, rom: Rom, file_start: int, file_end: int) -> None:
+        self.file_start = file_start
+        self.file_end = file_end
+        self.unused_addr = get_segment_address(
+            2, self.file_end - self.file_start)
+
+        # Sorted segment addresses for computing number of data elements
+        addresses = sorted([mesh.cams_addr, mesh.polytypes_addr, mesh.polys_addr,
+                           mesh.vertices_addr, mesh.waterboxes_addr, self.unused_addr])
+
+        # Cams data record; compute number of cams
+        next_addr = [addr for addr in addresses if addr > mesh.cams_addr][0]
+        num_cams = (next_addr - mesh.cams_addr) // 8
+        cams_size = CollisionData.get_cams_size(num_cams)
+        cams_start = get_rom_address(self.file_start, mesh.cams_addr)
+        self.cams = CollisionDataRecord(
+            num_cams,
+            mesh.cams_addr,
+            cams_size,
+            rom.read_bytes(cams_start, cams_size),
+        )
+
+        # Polytypes data record; compute number of cams
+        next_addr = [addr for addr in addresses if addr > mesh.polys_addr][0]
+        num_polytypes = (next_addr - mesh.polytypes_addr) // 8
+        polytypes_size = CollisionData.get_polytypes_size(num_polytypes)
+        polytypes_start = get_rom_address(self.file_start, mesh.polytypes_addr)
+        self.polytypes = CollisionDataRecord(
+            num_polytypes,
+            mesh.polytypes_addr,
+            polytypes_size,
+            rom.read_bytes(polytypes_start, polytypes_size),
+        )
+
+        # Polys data record
+        polys_size = CollisionData.get_polys_size(mesh.num_polys)
+        polys_start = get_rom_address(self.file_start, mesh.polys_addr)
+        self.polys = CollisionDataRecord(
+            mesh.num_polys,
+            mesh.polys_addr,
+            polys_size,
+            rom.read_bytes(polys_start, polys_size),
+        )
+
+        # Vertices data record
+        vertices_size = CollisionData.get_vertices_size(mesh.num_vertices)
+        vertices_start = get_rom_address(self.file_start, mesh.vertices_addr)
+        self.vertices = CollisionDataRecord(
+            mesh.num_vertices,
+            mesh.vertices_addr,
+            vertices_size,
+            rom.read_bytes(vertices_start, vertices_size),
+        )
+
+        # Waterboxes data record
+        waterboxes_size = CollisionData.get_waterboxes_size(
+            mesh.num_waterboxes)
+        waterboxes_start = get_rom_address(
+            self.file_start, mesh.waterboxes_addr)
+        self.waterboxes = CollisionDataRecord(
+            mesh.num_waterboxes,
+            mesh.waterboxes_addr,
+            waterboxes_size,
+            rom.read_bytes(waterboxes_start, waterboxes_size),
+        )
+
+        self.start_addr = min([
+            self.cams.addr if self.cams.addr > 0 else 0x02FFFFFF,
+            self.polytypes.addr if self.polytypes.addr > 0 else 0x02FFFFFF,
+            self.polys.addr if self.polys.addr > 0 else 0x02FFFFFF,
+            self.vertices.addr if self.vertices.addr > 0 else 0x02FFFFFF,
+            self.waterboxes.addr if self.waterboxes.addr > 0 else 0x02FFFFFF,
+        ])
+        self.end_addr = max([
+            self.cams.addr + self.cams.size,
+            self.polytypes.addr + self.polytypes.size,
+            self.polys.addr + self.polys.size,
+            self.vertices.addr + self.vertices.size,
+            self.waterboxes.addr + self.waterboxes.size,
+        ])
+
+    @staticmethod
+    def get_cams_size(num_cams: int) -> int:
+        return num_cams * 0x08
+
+    @staticmethod
+    def get_polytypes_size(num_polytypes: int) -> int:
+        return num_polytypes * 0x08
+
+    @staticmethod
+    def get_polys_size(num_polys: int) -> int:
+        return num_polys * 0x10
+
+    @staticmethod
+    def get_vertices_size(num_vertices: int) -> int:
+        return align4(num_vertices * 0x06)
+
+    @staticmethod
+    def get_waterboxes_size(num_waterboxes: int) -> int:
+        return num_waterboxes * 0x10
+
+    # TODO.GQ: Remove this debug information
+    def print(self) -> None:
+        # TODO.GQ: Remove this debug information
+        def printAddressLine(name: str, start_addr: int, end_addr: Optional[int] = None) -> None:
+            if end_addr is None:
+                print(
+                    f'{name.ljust(17)} {start_addr:08X}            ({get_rom_address(self.file_start, start_addr):08X})')
+            else:
+                print(
+                    f'{name.ljust(17)} {start_addr:08X} - {end_addr:08X} ({get_rom_address(self.file_start, start_addr):08X} - {get_rom_address(self.file_start, end_addr):08X})')
+
+        def printCameraPositions(cams: bytearray, num_cams: int) -> None:
+            print('CameraPositionDataArray:')
+            for i in range(num_cams):
+                numCameras = uint16.read(cams, (i * 0x08) + 0x02)
+                camPosData = uint32.read(cams, (i * 0x08) + 0x04)
+                if camPosData == 0:
+                    continue
+                elif numCameras == 0:
+                    printAddressLine(f'    {i}: ({numCameras} cams)'.ljust(
+                        16), camPosData, camPosData + 0x12)
+                else:
+                    printAddressLine(f'    {i}: ({numCameras} cams)'.ljust(
+                        16), camPosData, camPosData + (numCameras * 0x06))
+
+        printCameraPositions(self.cams.data, self.cams.num)
+        printAddressLine('StartAddress:', self.start_addr)
+        printAddressLine('CameraDataArray:', self.cams.addr,
+                         self.cams.addr + self.cams.size)
+        printAddressLine('PolyTypeArray:', self.polytypes.addr,
+                         self.polytypes.addr + self.polytypes.size)
+        printAddressLine('PolyArray:', self.polys.addr,
+                         self.polys.addr + self.polys.size)
+        printAddressLine('VertexArray:', self.vertices.addr,
+                         self.vertices.addr + self.vertices.size)
+        printAddressLine('WaterBoxesArray:', self.waterboxes.addr,
+                         self.waterboxes.addr + self.waterboxes.size)
+        printAddressLine('EndAddress:', self.end_addr)
+        printAddressLine('UnusedAddress:', self.unused_addr)
+        print('')
+
+
 class CollisionMesh:
     def __init__(self, rom: Rom, start: int, offset: int) -> None:
         self.offset = offset
-        self.poly_addr = rom.read_int32(start + offset + 0x18)
+        self.num_vertices = rom.read_int16(start + offset + 0x0C)
+        self.vertices_addr = rom.read_int32(start + offset + 0x10)
+        self.num_polys = rom.read_int16(start + offset + 0x14)
+        self.polys_addr = rom.read_int32(start + offset + 0x18)
         self.polytypes_addr = rom.read_int32(start + offset + 0x1C)
-        self.camera_data_addr = rom.read_int32(start + offset + 0x20)
-        self.polytypes = (self.poly_addr - self.polytypes_addr) // 8
+        self.cams_addr = rom.read_int32(start + offset + 0x20)
+        self.num_waterboxes = rom.read_int16(start + offset + 0x24)
+        self.waterboxes_addr = rom.read_int32(start + offset + 0x28)
 
     def write_to_scene(self, rom: Rom, start: int) -> None:
-        addr = start + self.offset + 0x18
-        rom.write_int32s(addr, [self.poly_addr, self.polytypes_addr, self.camera_data_addr])
+        rom.write_int16(start + self.offset + 0x0C, self.num_vertices)
+        rom.write_int32(start + self.offset + 0x10, self.vertices_addr)
+        rom.write_int16(start + self.offset + 0x14, self.num_polys)
+        rom.write_int32(start + self.offset + 0x18, self.polys_addr)
+        rom.write_int32(start + self.offset + 0x1C, self.polytypes_addr)
+        rom.write_int32(start + self.offset + 0x20, self.cams_addr)
+        rom.write_int16(start + self.offset + 0x24, self.num_waterboxes)
+        rom.write_int32(start + self.offset + 0x28, self.waterboxes_addr)
 
 
 class ColDelta:
     def __init__(self, delta: dict[str, bool | list[dict[str, int]]]) -> None:
         self.is_larger: bool = delta['IsLarger']
+        self.num_vertices: int = delta['NumVertices']
+        self.vertices: list[dict[str, int]] = delta['Vertices']
+        self.num_polys: int = delta['NumPolys']
         self.polys: list[dict[str, int]] = delta['Polys']
+        self.num_polytypes: int = delta['NumPolyTypes']
         self.polytypes: list[dict[str, int]] = delta['PolyTypes']
+        self.num_cams: int = delta['NumCams']
         self.cams: list[dict[str, int]] = delta['Cams']
+        self.num_waterboxes: int = delta['NumWaterBoxes']
+        self.waterboxes: list[dict[str, int]] = delta['WaterBoxes']
 
 
 class Icon:
     def __init__(self, data: dict[str, int | list[dict[str, int]]]) -> None:
         self.icon: int = data["Icon"]
         self.count: int = data["Count"]
-        self.points: list[IconPoint] = [IconPoint(x) for x in data["IconPoints"]]
+        self.points: list[IconPoint] = [
+            IconPoint(x) for x in data["IconPoints"]]
 
     def write_to_minimap(self, rom: Rom, addr: int) -> None:
         rom.write_sbyte(addr, self.icon)
@@ -163,18 +341,22 @@ class IconPoint:
 
 
 class Scene:
-    def __init__(self, scene: dict[str, Any]) -> None:
+    def __init__(self, scene: dict[str, Any], fix_room_data: Optional[Callable[[Rom, Scene, Room], None]]) -> None:
         self.file: File = File.from_json(scene['File'])
         self.id: int = scene['Id']
-        self.transition_actors: list[list[int]] = [convert_actor_data(x) for x in scene['TActors']]
+        self.transition_actors: list[list[int]] = [
+            convert_actor_data(x) for x in scene['TActors']]
         self.rooms: list[Room] = [Room(x) for x in scene['Rooms']]
         self.paths: list[list[list[int]]] = []
         self.coldelta: ColDelta = ColDelta(scene["ColDelta"])
-        self.minimaps: list[list[Icon]] = [[Icon(icon) for icon in minimap['Icons']] for minimap in scene['Minimaps']]
-        self.floormaps: list[list[Icon]] = [[Icon(icon) for icon in floormap['Icons']] for floormap in scene['Floormaps']]
+        self.minimaps: list[list[Icon]] = [
+            [Icon(icon) for icon in minimap['Icons']] for minimap in scene['Minimaps']]
+        self.floormaps: list[list[Icon]] = [
+            [Icon(icon) for icon in floormap['Icons']] for floormap in scene['Floormaps']]
         temp_paths = scene['Paths']
         for item in temp_paths:
             self.paths.append(item['Points'])
+        self.fix_room_data = fix_room_data
 
     def write_data(self, rom: Rom) -> None:
         # write floormap and minimap data
@@ -222,8 +404,8 @@ class Scene:
         # write room file data
         for room in self.rooms:
             room.write_data(rom)
-            if self.id == 6 and room.id == 6:
-                patch_spirit_temple_mq_room_6(rom, room.file.start)
+            if self.fix_room_data:
+                self.fix_room_data(rom, self, room)
 
         cur = self.file.start + room_list_offset
         for room in self.rooms:
@@ -246,11 +428,12 @@ class Scene:
                 Icon.write_to_floormap(icon, rom, cur)
                 cur += 0xA4
 
-        # fixes jabu jabu floor B1 having no chest data
-        if self.id == 2:
-            cur = floormap_vrom + (0x08 * 0x1EC + 4)
-            kaleido_scope_chest_verts = 0x803A3DA0  # hax, should be vram 0x8082EA00
-            rom.write_int32s(cur, [0x17, kaleido_scope_chest_verts, 0x04])
+        # TODO.GQ: Put this back
+        # # fixes jabu jabu floor B1 having no chest data
+        # if self.id == 2:
+        #     cur = floormap_vrom + (0x08 * 0x1EC + 4)
+        #     kaleido_scope_chest_verts = 0x803A3DA0  # hax, should be vram 0x8082EA00
+        #     rom.write_int32s(cur, [0x17, kaleido_scope_chest_verts, 0x04])
 
         # write minimaps
         map_mark_vrom = 0xBF40D0
@@ -268,84 +451,169 @@ class Scene:
                 cur += 0x26
 
     def patch_mesh(self, rom: Rom, mesh: CollisionMesh) -> None:
-        start = self.file.start
+        # original collision data
+        original_data = CollisionData(
+            mesh, rom, self.file.start, self.file.end)
 
-        final_cams = []
+        # TODO.GQ: Remove this debug information
+        print(f'{self.file.name} ORIGINAL COLLISION DATA')
+        original_data.print()
 
-        # build final camera data
-        for cam in self.coldelta.cams:
+        # determine whether the data will fit into the existing space
+        # if not, minimize the file size increase by moving the smallest blocks of data
+        new_size_data = {
+            'cams': CollisionData.get_cams_size(self.coldelta.num_cams),
+            'polytypes': CollisionData.get_polytypes_size(self.coldelta.num_polytypes),
+            'polys': CollisionData.get_polys_size(self.coldelta.num_polys),
+            'vertices': CollisionData.get_vertices_size(self.coldelta.num_vertices),
+            'waterboxes': CollisionData.get_waterboxes_size(self.coldelta.num_waterboxes),
+        }
+        new_size_total = sum(size for size in new_size_data.values())
+
+        # determine which data to move
+        if original_data.start_addr + new_size_total > original_data.end_addr:
+            data_to_move: tuple[tuple[str, int]] = tuple(new_size_data.items())
+            power_set: chain[tuple[tuple[str, int]]] = chain.from_iterable(combinations(
+                new_size_data.items(), r) for r in range(1, len(new_size_data) + 1))
+            for size_set in power_set:
+                size_set_total = sum(size for (_, size) in list(size_set))
+                if original_data.start_addr + new_size_total - size_set_total <= original_data.end_addr:
+                    data_to_move_total = sum(
+                        size for (_, size) in list(data_to_move))
+                    if size_set_total < data_to_move_total:
+                        data_to_move = size_set
+        else:
+            data_to_move = ((),)
+
+        # get next mesh address, in the original mesh space or at the end of the original scene file
+        def get_next_mesh_addr(data_to_move: tuple[tuple[str, int]], new_size_data: dict[str, int], key: str, curr_addr: int, curr_unused_addr: int) -> tuple[int, int, int]:
+            if any(key in x for x in data_to_move):
+                return (curr_unused_addr, curr_addr, curr_unused_addr + new_size_data[key])
+            elif new_size_data[key] > 0:
+                return (curr_addr, curr_addr + new_size_data[key], curr_unused_addr)
+            else:
+                return (0, curr_addr, curr_unused_addr)
+
+        # move data
+        curr_addr = original_data.start_addr
+        curr_unused_addr = original_data.unused_addr
+
+        (move_cams_addr, curr_addr, curr_unused_addr) = get_next_mesh_addr(
+            data_to_move, new_size_data, 'cams', curr_addr, curr_unused_addr)
+        (move_polytypes_addr, curr_addr, curr_unused_addr) = get_next_mesh_addr(
+            data_to_move, new_size_data, 'polytypes', curr_addr, curr_unused_addr)
+        (move_polys_addr, curr_addr, curr_unused_addr) = get_next_mesh_addr(
+            data_to_move, new_size_data, 'polys', curr_addr, curr_unused_addr)
+        (move_vertices_addr, curr_addr, curr_unused_addr) = get_next_mesh_addr(
+            data_to_move, new_size_data, 'vertices', curr_addr, curr_unused_addr)
+        (move_waterboxes_addr, curr_addr, curr_unused_addr) = get_next_mesh_addr(
+            data_to_move, new_size_data, 'waterboxes', curr_addr, curr_unused_addr)
+
+        # increase file size as needed
+        self.file.end = align16(get_rom_address(
+            self.file.start, curr_unused_addr))
+
+        # patch cams
+        if move_cams_addr != mesh.cams_addr:
+            # move data
+            mesh.cams_addr = move_cams_addr
+            rom.write_bytes(get_rom_address(self.file.start,
+                            move_cams_addr), original_data.cams.data)
+        for index, cam in enumerate(self.coldelta.cams):
             data = cam['Data']
             pos = cam['PositionIndex']
+
+            addr = get_rom_address(
+                self.file.start, move_cams_addr) + (index * 0x08)
             if pos < 0:
-                final_cams.append((data, 0))
+                rom.write_int32s(addr, [data, 0])
             else:
-                addr = start + (mesh.camera_data_addr & 0xFFFFFF)
-                seg_off = rom.read_int32(addr + (pos * 8) + 4)
-                final_cams.append((data, seg_off))
-
-        types_move_addr = 0
-
-        # if data can't fit within the old mesh space, append camera data
-        if self.coldelta.is_larger:
-            types_move_addr = mesh.camera_data_addr
-
-            # append to end of file
-            self.write_cam_data(rom, self.file.end, final_cams)
-            mesh.camera_data_addr = get_segment_address(2, self.file.end - self.file.start)
-            self.file.end += len(final_cams) * 8
-
-        else:
-            types_move_addr = mesh.camera_data_addr + (len(final_cams) * 8)
-
-            # append in place
-            addr = self.file.start + (mesh.camera_data_addr & 0xFFFFFF)
-            self.write_cam_data(rom, addr, final_cams)
-
-        # if polytypes needs to be moved, do so
-        if types_move_addr != mesh.polytypes_addr:
-            a_start = self.file.start + (mesh.polytypes_addr & 0xFFFFFF)
-            b_start = self.file.start + (types_move_addr & 0xFFFFFF)
-            size = mesh.polytypes * 8
-
-            rom.buffer[b_start:b_start + size] = rom.buffer[a_start:a_start + size]
-            mesh.polytypes_addr = types_move_addr
+                seg_off = rom.read_int32(addr + 0x04)
+                rom.write_int32s(addr, [data, seg_off])
 
         # patch polytypes
+        if move_polytypes_addr != mesh.polytypes_addr:
+            # move data
+            mesh.polytypes_addr = move_polytypes_addr
+            rom.write_bytes(
+                get_rom_address(self.file.start,
+                                move_polytypes_addr), original_data.polytypes.data)
         for item in self.coldelta.polytypes:
             id = item['Id']
             high = item['High']
             low = item['Low']
-            addr = self.file.start + (mesh.polytypes_addr & 0xFFFFFF) + (id * 8)
+
+            addr = get_rom_address(
+                self.file.start, move_polytypes_addr) + (id * 0x08)
             rom.write_int32s(addr, [high, low])
 
         # patch poly data
+        mesh.num_polys = self.coldelta.num_polys
+        if move_polys_addr != mesh.polys_addr:
+            # move data
+            mesh.polys_addr = move_polys_addr
+            rom.write_bytes(get_rom_address(self.file.start,
+                            move_polys_addr), original_data.polys.data)
         for item in self.coldelta.polys:
             id = item['Id']
             t = item['Type']
             flags = item['Flags']
 
-            addr = self.file.start + (mesh.poly_addr & 0xFFFFFF) + (id * 0x10)
-            vert_bit =  rom.read_byte(addr + 0x02) & 0x1F  # VertexA id data
+            addr = get_rom_address(
+                self.file.start, move_polys_addr) + (id * 0x10)
+            vert_bit = rom.read_byte(addr + 0x02) & 0x1F  # VertexA id data
             rom.write_int16(addr, t)
             rom.write_byte(addr + 0x02, (flags << 5) + vert_bit)
+
+        # patch vertices
+        mesh.num_vertices = self.coldelta.num_vertices
+        if move_vertices_addr != mesh.vertices_addr:
+            # move data
+            mesh.vertices_addr = move_vertices_addr
+            rom.write_bytes(get_rom_address(self.file.start,
+                            move_vertices_addr), original_data.vertices.data)
+        for item in self.coldelta.vertices:
+            id = item['Id']
+            x = item['X']
+            y = item['Y']
+            z = item['Z']
+
+            addr = get_rom_address(
+                self.file.start, move_vertices_addr) + (id * 0x06)
+            rom.write_int16s(addr, [x, y, z])
+
+        # patch waterboxes
+        mesh.num_waterboxes = self.coldelta.num_waterboxes
+        if move_waterboxes_addr != mesh.waterboxes_addr:
+            # move data
+            mesh.waterboxes_addr = move_waterboxes_addr
+            rom.write_bytes(get_rom_address(self.file.start,
+                            move_waterboxes_addr), original_data.waterboxes.data)
+        for item in self.coldelta.waterboxes:
+            id = item['Id']
+            data = item['Data']
+
+            addr = get_rom_address(
+                self.file.start, move_waterboxes_addr) + (id * 0x10)
+            rom.write_int16s(addr, data)
 
         # Write Mesh to Scene
         mesh.write_to_scene(rom, self.file.start)
 
-    @staticmethod
-    def write_cam_data(rom: Rom, addr: int, cam_data: list[tuple[int, int]]) -> None:
-        for item in cam_data:
-            data, pos = item
-            rom.write_int32s(addr, [data, pos])
-            addr += 8
+        # TODO.GQ: Remove this debug information
+        new_data = CollisionData(mesh, rom, self.file.start, self.file.end)
+        print(f'{self.file.name} NEW COLLISION DATA')
+        new_data.print()
 
-    # appends path data to the end of the rom
+    # appends path data to the end of the file
     # returns segment address to path data
+
     def append_path_data(self, rom: Rom) -> int:
         start = self.file.start
         cur = self.file.end
         records = []
 
+        # append paths as points
         for path in self.paths:
             nodes = len(path)
             offset = get_segment_address(2, cur - start)
@@ -357,6 +625,7 @@ class Scene:
             path_size = align4(len(path) * 6)
             cur += path_size
 
+        # append path lengths and start addresses
         records_offset = get_segment_address(2, cur - start)
         for node, offset in records:
             rom.write_byte(cur, node)
@@ -372,7 +641,8 @@ class Room:
         self.file: File = File.from_json(room['File'])
         self.id: int = room['Id']
         self.objects: list[int] = [int(x, 16) for x in room['Objects']]
-        self.actors: list[list[int]] = [convert_actor_data(x) for x in room['Actors']]
+        self.actors: list[list[int]] = [
+            convert_actor_data(x) for x in room['Actors']]
 
     def write_data(self, rom: Rom) -> None:
         # move file to remap address
@@ -386,19 +656,39 @@ class Room:
         while loop != 0 and code != 0x14:  # terminator
             loop -= 1
 
-            if code == 0x01: # actors
-                offset = self.file.end - self.file.start
-                write_actor_data(rom, self.file.end, self.actors)
-                self.file.end += len(self.actors) * 0x10
+            if code == 0x01:  # actors
+                num_actors = rom.read_byte(headcur + 1)
+                actor_list_offset = rom.read_int24(headcur + 5)
 
-                rom.write_byte(headcur + 1, len(self.actors))
-                rom.write_int32(headcur + 4, get_segment_address(3, offset))
+                if len(self.actors) > num_actors:
+                    offset = self.file.end - self.file.start
+                    write_actor_data(rom, self.file.end, self.actors)
+                    self.file.end += len(self.actors) * 0x10
 
-            elif code == 0x0B: # objects
-                offset = self.append_object_data(rom, self.objects)
+                    rom.write_byte(headcur + 1, len(self.actors))
+                    rom.write_int32(
+                        headcur + 4, get_segment_address(3, offset))
+                else:
+                    write_actor_data(rom, self.file.start +
+                                     actor_list_offset, self.actors)
 
-                rom.write_byte(headcur + 1, len(self.objects))
-                rom.write_int32(headcur + 4, get_segment_address(3, offset))
+                    rom.write_byte(headcur + 1, len(self.actors))
+
+            elif code == 0x0B:  # objects
+                num_objects = rom.read_byte(headcur + 1)
+                object_list_offset = rom.read_int24(headcur + 5)
+
+                if len(self.objects) > num_objects:
+                    offset = self.append_object_data(rom, self.objects)
+
+                    rom.write_byte(headcur + 1, len(self.objects))
+                    rom.write_int32(
+                        headcur + 4, get_segment_address(3, offset))
+                else:
+                    rom.write_int16s(self.file.start +
+                                     object_list_offset, self.objects)
+
+                    rom.write_byte(headcur + 1, len(self.objects))
 
             headcur += 8
             code = rom.read_byte(headcur)
@@ -417,25 +707,70 @@ class Room:
         return offset
 
 
-def patch_files(rom: Rom, mq_scenes: list[int]) -> None:
+def patch_files(rom: Rom, patch_scenes: list[int], get_json: Callable[[], Any], fix_scene_data: Optional[Callable[[Rom, Scene], None]], fix_room_data: Optional[Callable[[Rom, Scene, Room], None]]) -> None:
     data = get_json()
-    scenes = [Scene(x) for x in data]
+    scenes = [Scene(x, fix_room_data) for x in data]
     for scene in scenes:
-        if scene.id in mq_scenes:
-            if scene.id == 9:
-                patch_ice_cavern_scene_header(rom)
+        if scene.id in patch_scenes:
+            if fix_scene_data:
+                fix_scene_data(rom, scene)
             scene.write_data(rom)
 
 
-def get_json() -> Any:
+def get_mq_scenes(world: World) -> list[int]:
+    # patch mq scenes
+    mq_scenes: list[int] = []
+    if world.dungeon_mq['Deku Tree'] == DungeonType.MQ:
+        mq_scenes.append(0)
+    if world.dungeon_mq['Dodongos Cavern'] == DungeonType.MQ:
+        mq_scenes.append(1)
+    if world.dungeon_mq['Jabu Jabus Belly'] == DungeonType.MQ:
+        mq_scenes.append(2)
+    if world.dungeon_mq['Forest Temple'] == DungeonType.MQ:
+        mq_scenes.append(3)
+    if world.dungeon_mq['Fire Temple'] == DungeonType.MQ:
+        mq_scenes.append(4)
+    if world.dungeon_mq['Water Temple'] == DungeonType.MQ:
+        mq_scenes.append(5)
+    if world.dungeon_mq['Spirit Temple'] == DungeonType.MQ:
+        mq_scenes.append(6)
+    if world.dungeon_mq['Shadow Temple'] == DungeonType.MQ:
+        mq_scenes.append(7)
+    if world.dungeon_mq['Bottom of the Well'] == DungeonType.MQ:
+        mq_scenes.append(8)
+    if world.dungeon_mq['Ice Cavern'] == DungeonType.MQ:
+        mq_scenes.append(9)
+    # Scene 10 has no layout changes, so it doesn't need to be patched
+    if world.dungeon_mq['Gerudo Training Ground'] == DungeonType.MQ:
+        mq_scenes.append(11)
+    if world.dungeon_mq['Ganons Castle'] == DungeonType.MQ:
+        mq_scenes.append(13)
+    return mq_scenes
+
+
+def get_mq_json() -> Any:
     with open(data_path('mqu.json'), 'r') as stream:
         data = json.load(stream)
     return data
 
 
+def fix_mq_scene_data(rom: Rom, scene: Scene) -> None:
+    if scene.id == 9:
+        patch_ice_cavern_scene_header(rom)
+
+
+def fix_mq_room_data(rom: Rom, scene: Scene, room: Room) -> None:
+    if scene.id == 6 and room.id == 6:
+        patch_spirit_temple_mq_room_6(rom, room.file.start)
+
+
 def convert_actor_data(string: str) -> list[int]:
     spawn_args = string.split(" ")
-    return [ int(x,16) for x in spawn_args ]
+    return [int(x, 16) for x in spawn_args]
+
+
+def get_rom_address(file_start: int, segment_address: int) -> int:
+    return file_start + (segment_address & 0xFFFFFF) if segment_address > 0 else 0
 
 
 def get_segment_address(base: int, offset: int) -> int:
@@ -474,12 +809,14 @@ def patch_spirit_temple_mq_room_6(rom: Rom, room_addr: int) -> None:
     alt_data_off = header_size + 8
 
     # set new alternate header offset
-    alt_header_off = align16(alt_data_off + (4 * 3))  # alt header record size * num records
+    # alt header record size * num records
+    alt_header_off = align16(alt_data_off + (4 * 3))
 
     # write alternate header data
     # the first 3 words are mandatory. the last 3 are just to make the binary
     # cleaner to read
-    rom.write_int32s(room_addr + alt_data_off, [0, get_segment_address(3, alt_header_off), 0, 0, 0, 0])
+    rom.write_int32s(room_addr + alt_data_off,
+                     [0, get_segment_address(3, alt_header_off), 0, 0, 0, 0])
 
     # clone header
     a_start = room_addr
@@ -595,9 +932,9 @@ def insert_space(rom: Rom, file: File, vram_start: int, insert_section: int, ins
         if insert_section == section and offset >= insert_offset:
             # rebuild new relocation entry
             rom.write_int32(cur,
-                ((section + 1) << 30) |
-                (type << 24) |
-                (offset + insert_size))
+                            ((section + 1) << 30) |
+                            (type << 24) |
+                            (offset + insert_size))
 
         # value contains the vram address
         value = rom.read_int32(address)
@@ -657,7 +994,8 @@ def insert_space(rom: Rom, file: File, vram_start: int, insert_section: int, ins
         cur += 4
 
     # Move rom bytes
-    rom.buffer[(insert_rom + insert_size):(file.end + insert_size)] = rom.buffer[insert_rom:file.end]
+    rom.buffer[(insert_rom + insert_size):(file.end + insert_size)
+               ] = rom.buffer[insert_rom:file.end]
     rom.buffer[insert_rom:(insert_rom + insert_size)] = [0] * insert_size
     file.end += insert_size
 
@@ -684,7 +1022,7 @@ def add_relocations(rom: Rom, file: File, addresses: list[int | tuple[int, int]]
         relocations.append(rom.read_int32(cur))
         cur += 4
 
-    # create new enties
+    # create new entries
     for address in addresses:
         if isinstance(address, tuple):
             # if type provided use it
@@ -693,12 +1031,12 @@ def add_relocations(rom: Rom, file: File, addresses: list[int | tuple[int, int]]
             # Otherwise, try to infer type from value
             value = rom.read_int32(address)
             op = value >> 26
-            type = 2 # default: data
-            if op == 0x02 or op == 0x03: # j or jal
+            type = 2  # default: data
+            if op == 0x02 or op == 0x03:  # j or jal
                 type = 4
-            elif op == 0x0F: # lui
+            elif op == 0x0F:  # lui
                 type = 5
-            elif op == 0x08: # addi
+            elif op == 0x08:  # addi
                 type = 6
 
         # Calculate section and offset
@@ -713,12 +1051,12 @@ def add_relocations(rom: Rom, file: File, addresses: list[int | tuple[int, int]]
 
         # generate relocation entry
         relocations.append((section << 30)
-                        | (type << 24)
-                        | (offset & 0x00FFFFFF))
+                           | (type << 24)
+                           | (offset & 0x00FFFFFF))
 
     # Rebuild Relocation Table
     cur = header + 0x10
-    relocations.sort(key = lambda val: val & 0xC0FFFFFF)
+    relocations.sort(key=lambda val: val & 0xC0FFFFFF)
     rom.write_int32(cur, len(relocations))
     cur += 4
     for relocation in relocations:

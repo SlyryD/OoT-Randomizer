@@ -1,0 +1,28 @@
+[
+    {
+        "region_name": "Dodongos Cavern Beginning",
+        "dungeon": "Dodongos Cavern",
+        "locations": {
+            "Dodongos Cavern GQ Frozen Eye Switch Chest": "True",
+            "Dodongos Cavern GQ Compass Chest": "True",
+            "Dodongos Cavern GQ Map Chest": "True",
+            "Dodongos Cavern GQ Boss Key Chest": "True",
+            "Dodongos Cavern GQ Bomb Bag Chest": "True",
+            "Dodongos Cavern GQ Suns Song Chest": "True",
+            "Dodongos Cavern GQ Deku Scrub": "True",
+            "Dodongos Cavern GQ Cow": "True",
+            "Dodongos Cavern GQ GS Right Side Ceiling": "True",
+            "Dodongos Cavern GQ GS Right Side Hallway": "True",
+            "Dodongos Cavern GQ GS Lower Lizalfos": "True",
+            "Dodongos Cavern GQ GS Side Room Near Torch Room": "True",
+            "Dodongos Cavern GQ GS Bridge": "True",
+            "Dodongos Cavern GQ GS Before Upper Lizalfos": "True",
+            "Dodongos Cavern GQ GS Upper Lizalfos": "True",
+            "Dodongos Cavern GQ GS Back Area": "True",
+            "Dodongos Cavern Gossip Stone": "True"
+        },
+        "exits": {
+            "Dodongos Cavern Boss Door": "True"
+        }
+    }
+]

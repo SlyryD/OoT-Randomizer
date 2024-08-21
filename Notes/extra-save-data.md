@@ -74,7 +74,20 @@ The unused field (offset 0x10) of the permanent scene flags (save context + 0xd4
 
 With `shuffle_cows`, the flags representing which cows have been talked to are stored in the collectibles field (offset 0x0c) of the permanent scene flags of the cow's respective scene:
 
+* Dodongos Cavern GQ Cow: scene 0x01, bit 0100_0000
 * Jabu Jabus Belly MQ Cow: scene 0x02, bit 0100_0000
+* Jabu Jabus Belly GQ Prolapsed Cow: scene 0x02, bit 0100_0000
+* Jabu Jabus Belly GQ Near Boss Standing Cow: scene 0x02, bit 0200_0000
+* Jabu Jabus Belly GQ Near Boss Climbing Cow: scene 0x02, bit 0400_0000
+* Fire Temple GQ Shortcut Room Cow: scene 0x04, bit 0100_0000
+* Fire Temple GQ Compass Room Cow: scene 0x04, bit 0200_0000
+* Spirit Temple GQ Throne Room Left Cow: scene 0x06, bit 0100_0000
+* Spirit Temple GQ Throne Room Right Cow: scene 0x06, bit 0200_0000
+* Shadow Temple GQ Keese Destruction Room Cow: scene 0x07, bit 0100_0000
+* Shadow Temple GQ After Fan Room Cow: scene 0x07, bit 0200_0000
+* Shadow Temple GQ Boat Room Cow: scene 0x07, bit 0400_0000
+* Ice Cavern GQ Front Cow: scene 0x09, bit 0100_0000
+* Ice Cavern GQ Back Cow: scene 0x09, bit 0200_0000
 * KF Links House Cow: scene 0x34, bit 0100_0000
 * LLR Stables Right Cow: scene 0x36, bit 0200_0000
 * LLR Stables Left Cow: scene 0x36, bit 0100_0000

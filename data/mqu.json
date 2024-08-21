@@ -535,6 +535,11 @@
     ],
     "ColDelta": {
       "IsLarger": true,
+      "MinVertex": { "Id": -1, "X": -2788, "Y": -1960, "Z": -2928 },
+      "MaxVertex": { "Id": -1, "X": 494, "Y": 1160, "Z": 1714 },
+      "NumVertices": 1399,
+      "Vertices": [],
+      "NumPolys": 2321,
       "Polys": [
         {
           "Id": 459,
@@ -2017,6 +2022,7 @@
           "Flags": 0
         }
       ],
+      "NumPolyTypes": 31,
       "PolyTypes": [
         {
           "Id": 11,
@@ -2119,6 +2125,7 @@
           "Low": 14304
         }
       ],
+      "NumCams": 11,
       "Cams": [
         {
           "Data": 1572867,
@@ -2164,7 +2171,9 @@
           "Data": 262144,
           "PositionIndex": -1
         }
-      ]
+      ],
+      "NumWaterBoxes": 3,
+      "WaterBoxes": []
     },
     "Floormaps": [
       {
@@ -3324,6 +3333,11 @@
     ],
     "ColDelta": {
       "IsLarger": true,
+      "MinVertex": { "Id": -1, "X": -2440, "Y": -764, "Z": -4749 },
+      "MaxVertex": { "Id": -1, "X": 4757, "Y": 931, "Z": 720 },
+      "NumVertices": 2197,
+      "Vertices": [],
+      "NumPolys": 3663,
       "Polys": [
         {
           "Id": 778,
@@ -6681,6 +6695,7 @@
           "Flags": 0
         }
       ],
+      "NumPolyTypes": 55,
       "PolyTypes": [
         {
           "Id": 10,
@@ -6903,6 +6918,7 @@
           "Low": 12448
         }
       ],
+      "NumCams": 5,
       "Cams": [
         {
           "Data": 0,
@@ -6924,7 +6940,9 @@
           "Data": 3801088,
           "PositionIndex": -1
         }
-      ]
+      ],
+      "NumWaterBoxes": 0,
+      "WaterBoxes": []
     },
     "Floormaps": [
       {
@@ -8017,6 +8035,11 @@
     ],
     "ColDelta": {
       "IsLarger": true,
+      "MinVertex": { "Id": -1, "X": -1860, "Y": -1553, "Z": -6103 },
+      "MaxVertex": { "Id": -1, "X": 1971, "Y": 607, "Z": 500 },
+      "NumVertices": 2175,
+      "Vertices": [],
+      "NumPolys": 3966,
       "Polys": [
         {
           "Id": 69,
@@ -14009,6 +14032,7 @@
           "Flags": 0
         }
       ],
+      "NumPolyTypes": 65,
       "PolyTypes": [
         {
           "Id": 2,
@@ -14326,6 +14350,7 @@
           "Low": 12323
         }
       ],
+      "NumCams": 6,
       "Cams": [
         {
           "Data": 0,
@@ -14351,7 +14376,9 @@
           "Data": 65536,
           "PositionIndex": -1
         }
-      ]
+      ],
+      "NumWaterBoxes": 8,
+      "WaterBoxes": []
     },
     "Floormaps": [
       {
@@ -15571,8 +15598,15 @@
     ],
     "ColDelta": {
       "IsLarger": false,
+      "MinVertex": { "Id": -1, "X": -4857, "Y": -779, "Z": -5836 },
+      "MaxVertex": { "Id": -1, "X": 5095, "Y": 2851, "Z": 4564 },
+      "NumVertices": 3123,
+      "Vertices": [],
+      "NumPolys": 3843,
       "Polys": [],
+      "NumPolyTypes": 63,
       "PolyTypes": [],
+      "NumCams": 7,
       "Cams": [
         {
           "Data": 0,
@@ -15602,7 +15636,9 @@
           "Data": 3801088,
           "PositionIndex": -1
         }
-      ]
+      ],
+      "NumWaterBoxes": 5,
+      "WaterBoxes": []
     },
     "Floormaps": [
       {
@@ -17276,6 +17312,11 @@
     ],
     "ColDelta": {
       "IsLarger": false,
+      "MinVertex": { "Id": -1, "X": -3740, "Y": -100, "Z": -1940 },
+      "MaxVertex": { "Id": -1, "X": 3580, "Y": 5200, "Z": 2200 },
+      "NumVertices": 3540,
+      "Vertices": [],
+      "NumPolys": 4857,
       "Polys": [
         {
           "Id": 1054,
@@ -20043,6 +20084,7 @@
           "Flags": 0
         }
       ],
+      "NumPolyTypes": 67,
       "PolyTypes": [
         {
           "Id": 34,
@@ -20210,6 +20252,7 @@
           "Low": 2082
         }
       ],
+      "NumCams": 7,
       "Cams": [
         {
           "Data": 1835011,
@@ -20239,7 +20282,9 @@
           "Data": 3801088,
           "PositionIndex": -1
         }
-      ]
+      ],
+      "NumWaterBoxes": 0,
+      "WaterBoxes": []
     },
     "Floormaps": [
       {
@@ -22107,8 +22152,15 @@
     ],
     "ColDelta": {
       "IsLarger": false,
+      "MinVertex": { "Id": -1, "X": -4120, "Y": -580, "Z": -4820 },
+      "MaxVertex": { "Id": -1, "X": 1830, "Y": 1460, "Z": 1430 },
+      "NumVertices": 2715,
+      "Vertices": [],
+      "NumPolys": 3907,
       "Polys": [],
+      "NumPolyTypes": 90,
       "PolyTypes": [],
+      "NumCams": 6,
       "Cams": [
         {
           "Data": 0,
@@ -22134,7 +22186,9 @@
           "Data": 262144,
           "PositionIndex": -1
         }
-      ]
+      ],
+      "NumWaterBoxes": 25,
+      "WaterBoxes": []
     },
     "Floormaps": [
       {
@@ -24268,6 +24322,11 @@
     ],
     "ColDelta": {
       "IsLarger": false,
+      "MinVertex": { "Id": -1, "X": -1920, "Y": -330, "Z": -2654 },
+      "MaxVertex": { "Id": -1, "X": 2240, "Y": 2187, "Z": 1754 },
+      "NumVertices": 3404,
+      "Vertices": [],
+      "NumPolys": 4350,
       "Polys": [
         {
           "Id": 3109,
@@ -24460,6 +24519,7 @@
           "Flags": 0
         }
       ],
+      "NumPolyTypes": 68,
       "PolyTypes": [
         {
           "Id": 3,
@@ -24512,6 +24572,7 @@
           "Low": 12322
         }
       ],
+      "NumCams": 17,
       "Cams": [
         {
           "Data": 1966086,
@@ -24581,7 +24642,9 @@
           "Data": 131072,
           "PositionIndex": -1
         }
-      ]
+      ],
+      "NumWaterBoxes": 0,
+      "WaterBoxes": []
     },
     "Floormaps": [
       {
@@ -26341,8 +26404,15 @@
     ],
     "ColDelta": {
       "IsLarger": false,
+      "MinVertex": { "Id": -1, "X": -6171, "Y": -4023, "Z": -2951 },
+      "MaxVertex": { "Id": -1, "X": 5998, "Y": 337, "Z": 4394 },
+      "NumVertices": 3158,
+      "Vertices": [],
+      "NumPolys": 4420,
       "Polys": [],
+      "NumPolyTypes": 65,
       "PolyTypes": [],
+      "NumCams": 7,
       "Cams": [
         {
           "Data": 0,
@@ -26372,7 +26442,9 @@
           "Data": 196608,
           "PositionIndex": -1
         }
-      ]
+      ],
+      "NumWaterBoxes": 0,
+      "WaterBoxes": []
     },
     "Floormaps": [
       {
@@ -27603,6 +27675,11 @@
     ],
     "ColDelta": {
       "IsLarger": false,
+      "MinVertex": { "Id": -1, "X": -2565, "Y": -827, "Z": -1680 },
+      "MaxVertex": { "Id": -1, "X": 1640, "Y": 400, "Z": 2100 },
+      "NumVertices": 1396,
+      "Vertices": [],
+      "NumPolys": 2021,
       "Polys": [
         {
           "Id": 6,
@@ -33835,6 +33912,7 @@
           "Flags": 0
         }
       ],
+      "NumPolyTypes": 63,
       "PolyTypes": [
         {
           "Id": 1,
@@ -34017,6 +34095,7 @@
           "Low": 12290
         }
       ],
+      "NumCams": 16,
       "Cams": [
         {
           "Data": 1966086,
@@ -34082,7 +34161,9 @@
           "Data": 3801088,
           "PositionIndex": -1
         }
-      ]
+      ],
+      "NumWaterBoxes": 10,
+      "WaterBoxes": []
     },
     "Floormaps": [
       {
@@ -34991,6 +35072,11 @@
     ],
     "ColDelta": {
       "IsLarger": false,
+      "MinVertex": { "Id": -1, "X": -2019, "Y": -221, "Z": -2866 },
+      "MaxVertex": { "Id": -1, "X": 1672, "Y": 789, "Z": 3161 },
+      "NumVertices": 2024,
+      "Vertices": [],
+      "NumPolys": 2721,
       "Polys": [
         {
           "Id": 678,
@@ -36058,6 +36144,7 @@
           "Flags": 0
         }
       ],
+      "NumPolyTypes": 55,
       "PolyTypes": [
         {
           "Id": 0,
@@ -36325,6 +36412,7 @@
           "Low": 51330
         }
       ],
+      "NumCams": 4,
       "Cams": [
         {
           "Data": 0,
@@ -36342,6 +36430,12 @@
           "Data": 4063232,
           "PositionIndex": -1
         }
+      ],
+      "NumWaterBoxes": 3,
+      "WaterBoxes": [
+        { "Id": 0, "Data": [-894, 200, 1204, 400, 400, 0, 0, 9472] },
+        { "Id": 1, "Data": [-1083, 266, 972, 260, 260, 0, 0, -6912] },
+        { "Id": 2, "Data": [-894, 200, 1204, 400, 400, 0, 1, 17664] }
       ]
     },
     "Floormaps": [
@@ -36899,8 +36993,15 @@
     ],
     "ColDelta": {
       "IsLarger": false,
+      "MinVertex": { "Id": -1, "X": -754, "Y": -220, "Z": -820 },
+      "MaxVertex": { "Id": -1, "X": 726, "Y": 2000, "Z": 1326 },
+      "NumVertices": 2201,
+      "Vertices": [],
+      "NumPolys": 2818,
       "Polys": [],
+      "NumPolyTypes": 23,
       "PolyTypes": [],
+      "NumCams": 8,
       "Cams": [
         {
           "Data": 2097155,
@@ -36934,7 +37035,9 @@
           "Data": 0,
           "PositionIndex": -1
         }
-      ]
+      ],
+      "NumWaterBoxes": 0,
+      "WaterBoxes": []
     },
     "Floormaps": [],
     "Minimaps": []
@@ -37356,8 +37459,15 @@
     ],
     "ColDelta": {
       "IsLarger": false,
+      "MinVertex": { "Id": -1, "X": -2019, "Y": -961, "Z": -4073 },
+      "MaxVertex": { "Id": -1, "X": 2702, "Y": 539, "Z": 520 },
+      "NumVertices": 2282,
+      "Vertices": [],
+      "NumPolys": 3023,
       "Polys": [],
+      "NumPolyTypes": 40,
       "PolyTypes": [],
+      "NumCams": 6,
       "Cams": [
         {
           "Data": 1572867,
@@ -37383,7 +37493,9 @@
           "Data": 3801088,
           "PositionIndex": -1
         }
-      ]
+      ],
+      "NumWaterBoxes": 1,
+      "WaterBoxes": []
     },
     "Floormaps": [],
     "Minimaps": []
@@ -38347,6 +38459,11 @@
     ],
     "ColDelta": {
       "IsLarger": false,
+      "MinVertex": { "Id": -1, "X": -4239, "Y": -560, "Z": -5110 },
+      "MaxVertex": { "Id": -1, "X": 4052, "Y": 873, "Z": 2846 },
+      "NumVertices": 3675,
+      "Vertices": [],
+      "NumPolys": 5096,
       "Polys": [
         {
           "Id": 2403,
@@ -38429,7 +38546,9 @@
           "Flags": 4
         }
       ],
+      "NumPolyTypes": 90,
       "PolyTypes": [],
+      "NumCams": 10,
       "Cams": [
         {
           "Data": 1572867,
@@ -38471,7 +38590,9 @@
           "Data": 3801088,
           "PositionIndex": -1
         }
-      ]
+      ],
+      "NumWaterBoxes": 0,
+      "WaterBoxes": []
     },
     "Floormaps": [],
     "Minimaps": []

@@ -1,0 +1,26 @@
+[
+    {
+        "region_name": "Ice Cavern Beginning",
+        "dungeon": "Ice Cavern",
+        "locations": {
+            "Ice Cavern GQ Compass Chest": "True",
+            "Ice Cavern GQ Bow Chest": "True",
+            "Ice Cavern GQ Map Chest": "True",
+            "Ice Cavern GQ Bottom Right Eye Chest": "True",
+            "Ice Cavern GQ Top Eye Chest": "True",
+            "Ice Cavern GQ Front Cow": "True",
+            "Ice Cavern GQ Back Cow": "True",
+            "Ice Cavern GQ GS Entrance": "True",
+            "Ice Cavern GQ GS Compass Room": "True",
+            "Ice Cavern GQ GS Hallway": "True",
+            "Ice Cavern GQ GS Spinning Blade Room": "True",
+            "Ice Cavern GQ GS Block Push Alcove": "True",
+            "Ice Cavern GQ GS Block Push Hole": "True",
+            "Ice Cavern GQ GS Cow Room": "True",
+            "Ice Cavern GQ GS Map Room": "True"
+        },
+        "exits": {
+            "ZF Ice Ledge": "True"
+        }
+    }
+]

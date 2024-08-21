@@ -1,0 +1,52 @@
+[
+    {
+        "region_name": "Ganons Castle Lobby",
+        "dungeon": "Ganons Castle",
+        "locations": {
+            "Ganons Castle GQ Scrubs Chest": "True",
+            "Ganons Castle GQ Water Trial Right Chest": "True",
+            "Ganons Castle GQ Water Trial Left Chest": "True",
+            "Ganons Castle GQ Forest Trial Freestanding Key": "True",
+            "Ganons Castle GQ Light Trial Chest": "True",
+            "Ganons Castle GQ Shadow Trial Chest": "True",
+            "Ganons Castle GQ Fire Trial Chest": "True",
+            "Ganons Castle GQ Spirit Trial Front Chest": "True",
+            "Ganons Castle GQ Spirit Trial Back Chest": "True",
+            "Ganons Castle GQ Deku Scrub Center-Left": "True",
+            "Ganons Castle GQ Deku Scrub Right": "True",
+            "Ganons Castle GQ Deku Scrub Center-Right": "True",
+            "Ganons Castle GQ Deku Scrub Left": "True",
+            "Ganons Castle GQ GS Above Front Door": "True",
+            "Ganons Castle GQ GS Water Trial": "True",
+            "Ganons Castle GQ GS Forest Trial": "True",
+            "Ganons Castle GQ GS Light Trial": "True",
+            "Ganons Castle GQ GS Shadow Trial": "True",
+            "Ganons Castle GQ GS Fire Trial": "True",
+            "Ganons Castle GQ GS Spirit Trial": "True"
+        },
+        "exits": {
+            "Castle Grounds From Ganons Castle": "True",
+            "Ganons Tower": "True"
+        }
+    },
+    {
+        "region_name": "Ganons Tower",
+        "dungeon": "Ganons Castle",
+        "locations": {
+            "Ganons Tower GQ Dinalfos Room Chest": "True",
+            "Ganons Tower GQ Stalfos Room Chest": "True",
+            "Ganons Tower GQ GS Entrance": "True",
+            "Ganons Tower GQ GS Dinalfos Room Right": "True",
+            "Ganons Tower GQ GS Dinalfos Room Left": "True",
+            "Ganons Tower GQ GS Stalfos Room": "True",
+            "Ganons Tower GQ GS Iron Knuckle Room": "True",
+            "Ganons Tower GQ GS Pre Boss Room Above Door": "True",
+            "Ganons Tower GQ GS Pre Boss Room Back Wall": "True",
+            "Ganons Tower GQ GS Pre Boss Room Ceiling": "True",
+            "Ganons Tower GQ GS Pre Boss Room Slanted Ceiling": "True"
+        },
+        "exits": {
+            "Ganondorf Boss Room": "Boss_Key_Ganons_Castle"
+        }
+    }
+]

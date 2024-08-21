@@ -10,6 +10,7 @@ from functools import reduce
 from typing import TYPE_CHECKING, Any, Optional
 
 import StartingItems
+from Dungeon import DungeonType
 from Entrance import Entrance
 from EntranceShuffle import EntranceShuffleError, change_connections, confirm_replacement, validate_world, check_entrances_compatibility
 from Fill import FillError
@@ -75,23 +76,31 @@ class Record:
 
 
 class DungeonRecord(Record):
-    mapping: dict[str, Optional[bool]] = {
+    mapping: dict[str, Optional[DungeonType]] = {
         'random': None,
-        'mq': True,
-        'vanilla': False,
+        'gq': DungeonType.GQ,
+        'mq': DungeonType.MQ,
+        'vanilla': DungeonType.VANILLA,
     }
 
-    def __init__(self, src_dict: str | dict[str, Optional[bool]] = 'random') -> None:
-        self.mq: Optional[bool] = None
+    def __init__(self, src_dict: str | dict[str, Optional[DungeonType]] = 'random') -> None:
+        self.dungeon_mq: Optional[DungeonType] = None
 
         if isinstance(src_dict, str):
-            src_dict = {'mq': self.mapping.get(src_dict, None)}
-        super().__init__({'mq': None}, src_dict)
+            src_dict = {'dungeon_mq': self.mapping.get(src_dict, None)}
+        super().__init__({'dungeon_mq': None}, src_dict)
+
 
     def to_json(self) -> str:
-        if self.mq is None:
+        if self.dungeon_mq is None:
             return 'random'
-        return 'mq' if self.mq else 'vanilla'
+        if self.dungeon_mq == DungeonType.GQ:
+            return 'gq'
+        if self.dungeon_mq == DungeonType.MQ:
+            return 'mq'
+        if self.dungeon_mq == DungeonType.VANILLA:
+            return 'vanilla'
+        raise RuntimeError(f"Invalid dungeon_mq value: {self.dungeon_mq}")
 
 
 class EmptyDungeonRecord(Record):
@@ -420,21 +429,25 @@ class WorldDistribution:
                 raise KeyError('Cannot add location that already exists')
         self.locations[new_location] = LocationRecord(new_item)
 
-    def configure_dungeons(self, world: World, mq_dungeon_pool: list[str], empty_dungeon_pool: list[str]) -> tuple[int, int]:
-        dist_num_mq, dist_num_empty = 0, 0
+
+    def configure_dungeons(self, world: World, mq_dungeon_pool: list[str], gq_dungeon_pool: list[str], empty_dungeon_pool: list[str]) -> tuple[int, int, int]:
+        dist_num_mq, dist_num_gq, dist_num_empty = 0, 0, 0
         for (name, record) in self.dungeons.items():
-            if record.mq is not None:
-                mq_dungeon_pool.remove(name)
-                if record.mq:
+            if record.dungeon_mq is not None:
+                if record.dungeon_mq == DungeonType.MQ:
+                    mq_dungeon_pool.remove(name)
                     dist_num_mq += 1
-                    world.dungeon_mq[name] = True
+                if record.dungeon_mq == DungeonType.MQ:
+                    gq_dungeon_pool.remove(name)
+                    dist_num_gq += 1
+                world.dungeon_mq[name] = record.dungeon_mq
         for (name, record) in self.empty_dungeons.items():
             if record.empty is not None:
                 empty_dungeon_pool.remove(name)
                 if record.empty:
                     dist_num_empty += 1
                     world.empty_dungeons[name].empty = True
-        return dist_num_mq, dist_num_empty
+        return dist_num_mq, dist_num_gq, dist_num_empty
 
     def configure_trials(self, trial_pool: list[str]) -> list[str]:
         dist_chosen = []
@@ -1358,7 +1371,7 @@ class Distribution:
         for world in spoiler.worlds:
             world_dist = self.world_dists[world.id]
             world_dist.randomized_settings = {randomized_item: getattr(world.settings, randomized_item) for randomized_item in world.randomized_list}
-            world_dist.dungeons = {dung: DungeonRecord({ 'mq': world.dungeon_mq[dung] }) for dung in world.dungeon_mq}
+            world_dist.dungeons = {dung: DungeonRecord({ 'dungeon_mq': world.dungeon_mq[dung] }) for dung in world.dungeon_mq}
             world_dist.empty_dungeons = {dung: EmptyDungeonRecord({ 'empty': world.empty_dungeons[dung].empty }) for dung in world.empty_dungeons}
             world_dist.trials = {trial: TrialRecord({ 'active': not world.skipped_trials[trial] }) for trial in world.skipped_trials}
             if hasattr(world, 'song_notes'):
@@ -1378,7 +1391,7 @@ class Distribution:
                         if goal.items[0]['name'] == 'Triforce Piece':
                             goal_text +=  ' (' + str(goal.items[0]['quantity']) + '/' + str(world.triforce_count) + ' reachable)'
                         if goal.items[0]['name'] == 'Gold Skulltula Token':
-                            goal_text +=  ' (' + str(goal.items[0]['quantity']) + '/100 reachable)'
+                            goal_text +=  ' (' + str(goal.items[0]['quantity']) + '/100 reachable)' #TODO adjust total based on available_tokens?
                         if goal.items[0]['name'] == 'Piece of Heart':
                             goal_text +=  ' (' + str(goal.items[0]['quantity']) + '/68 reachable)' #TODO adjust total based on starting_hearts?
                         world_dist.goal_locations[cat_name][goal_text] = {}

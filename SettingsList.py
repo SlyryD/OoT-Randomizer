@@ -646,8 +646,9 @@ class SettingInfos:
             'glitched':   {'settings': ['allowed_tricks', 'shuffle_interior_entrances', 'shuffle_hideout_entrances', 'shuffle_grotto_entrances',
                                          'shuffle_dungeon_entrances', 'shuffle_overworld_entrances', 'shuffle_gerudo_valley_river_exit', 'owl_drops',
                                          'warp_songs', 'spawn_positions', 'mq_dungeons_mode', 'mq_dungeons_specific',
-                                         'mq_dungeons_count', 'shuffle_bosses', 'dungeon_shortcuts', 'deadly_bonks',
-                                         'shuffle_freestanding_items', 'shuffle_pots', 'shuffle_crates', 'shuffle_beehives', 'shuffle_silver_rupees', 'shuffle_wonderitems']},
+                                         'mq_dungeons_count', 'gq_dungeons_specific', 'gq_dungeons_count',
+                                         'shuffle_bosses', 'dungeon_shortcuts', 'deadly_bonks', 'shuffle_freestanding_items',
+                                         'shuffle_pots', 'shuffle_crates', 'shuffle_beehives', 'shuffle_silver_rupees', 'shuffle_wonderitems']},
             'none':       {'settings': ['allowed_tricks', 'logic_no_night_tokens_without_suns_song', 'reachable_locations']},
         },
         shared         = True,
@@ -1968,26 +1969,28 @@ class SettingInfos:
     )
 
     mq_dungeons_mode = Combobox(
-        gui_text       = 'MQ Dungeon Mode',
+        gui_text       = 'Dungeon Mode',
         default        = 'vanilla',
         choices        = {
             'vanilla':    "Vanilla",
             'mq':         "Master Quest",
+            'gq':         "Gold Quest",
             'specific':   "Specific Dungeons",
             'count':      "Count",
             'random':     "Completely Random",
         },
         gui_tooltip    = '''\
-            'Vanilla': All dungeons will be the original versions.
+            'Vanilla': All dungeons will be the Vanilla versions.
             'Master Quest': All dungeons will be the MQ versions.
+            'Gold Quest': All dungeons will be the GQ versions.
             'Specific Dungeons': Choose which specific dungeons will be MQ versions.
             'Count': Choose how many MQ dungeons will be randomly chosen.
-            'Completely Random': Each dungeon will vanilla or MQ at random.
+            'Completely Random': Add MQ and GQ dungeons to the random dungeon pool.
         ''',
         shared         = True,
         disable        = {
-            '!specific': {'settings': ['mq_dungeons_specific']},
-            '!count':    {'settings': ['mq_dungeons_count']},
+            '!specific': {'settings': ['mq_dungeons_specific', 'gq_dungeons_specific']},
+            '!count':    {'settings': ['mq_dungeons_count', 'gq_dungeons_count']},
         },
         gui_params     = {
             'distribution': [
@@ -2032,6 +2035,50 @@ class SettingInfos:
         maximum        = 12,
         gui_tooltip    = '''\
             Specify the number of Master Quest
+            dungeons to appear in the game.
+        ''',
+        shared         = True,
+        gui_params     = {
+            "hide_when_disabled": True,
+        },
+    )
+
+    gq_dungeons_specific = MultipleSelect(
+        gui_text        = 'GQ Dungeons',
+        choices         = {
+            'Deku Tree':              "Deku Tree",
+            'Dodongos Cavern':        "Dodongo's Cavern",
+            'Jabu Jabus Belly':       "Jabu Jabu's Belly",
+            'Forest Temple':          "Forest Temple",
+            'Fire Temple':            "Fire Temple",
+            'Water Temple':           "Water Temple",
+            'Shadow Temple':          "Shadow Temple",
+            'Spirit Temple':          "Spirit Temple",
+            'Bottom of the Well':     "Bottom of the Well",
+            'Ice Cavern':             "Ice Cavern",
+            'Gerudo Training Ground': "Gerudo Training Ground",
+            'Ganons Castle':          "Ganon's Castle",
+        },
+        default         = [],
+        gui_tooltip     = '''\
+            Select the specific dungeons you would
+            like the Gold Quest version of.
+            The unselected dungeons will be
+            the original version.
+        ''',
+        shared          = True,
+        gui_params     = {
+            "hide_when_disabled": True,
+        },
+    )
+
+    gq_dungeons_count = Scale(
+        gui_text       = "GQ Dungeon Count",
+        default        = 0,
+        minimum        = 0,
+        maximum        = 12,
+        gui_tooltip    = '''\
+            Specify the number of Gold Quest
             dungeons to appear in the game.
         ''',
         shared         = True,

@@ -1,0 +1,30 @@
+[
+    {
+        "region_name": "Water Temple Lobby",
+        "dungeon": "Water Temple",
+        "locations": {
+            "Water Temple GQ Spike and Stalfos Chest": "True",
+            "Water Temple GQ Compass Chest": "True",
+            "Water Temple GQ Torches Chest": "True",
+            "Water Temple GQ Boss Key Chest": "True",
+            "Water Temple GQ Central Pillar Chest": "True",
+            "Water Temple GQ Storage Room Chest": "True",
+            "Water Temple GQ Fan Room Chest": "True",
+            "Water Temple GQ Geyser Room Chest": "True",
+            "Water Temple GQ Map Chest": "True",
+            "Water Temple GQ Dragon Room Chest": "True",
+            "Water Temple GQ River Chest": "True",
+            "Water Temple GQ GS Lobby": "True",
+            "Water Temple GQ GS Floor Switch Sign Room": "True",
+            "Water Temple GQ GS Central Pillar": "True",
+            "Water Temple GQ GS Stinger Room": "True",
+            "Water Temple GQ GS After Dark Link": "True",
+            "Water Temple GQ GS River": "True",
+            "Water Temple GQ GS Dragon Room": "True",
+            "Water Temple GQ GS After Dragon Room": "True"
+        },
+        "exits": {
+            "Water Temple Boss Door": "True"
+        }
+    }
+]

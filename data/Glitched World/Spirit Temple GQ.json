@@ -1,0 +1,36 @@
+[
+    {
+        "region_name": "Spirit Temple Lobby",
+        "dungeon": "Spirit Temple",
+        "locations": {
+            "Spirit Temple GQ Kill Keese Chest": "True",
+            "Spirit Temple GQ Child Bridge Chest": "True",
+            "Spirit Temple GQ Map Chest": "True",
+            "Spirit Temple GQ Child Climb Bottom Chest": "True",
+            "Spirit Temple GQ Sun Block Room Chest": "True",
+            "Spirit Temple GQ Hover Boots Chest": "True",
+            "Spirit Temple GQ After Rolling Boulder Room Chest": "True",
+            "Spirit Temple GQ First Mirror Left Chest": "True",
+            "Spirit Temple GQ Compass Chest": "True",
+            "Spirit Temple GQ Statue Room Northwest Chest": "True",
+            "Spirit Temple GQ Statue Room Northeast Chest": "True",
+            "Spirit Temple GQ Boss Key Chest": "True",
+            "Spirit Temple GQ Iron Knuckles Chest": "True",
+            "Spirit Temple GQ Throne Cross Room Chest": "True",
+            "Spirit Temple GQ Topmost Chest": "True",
+            "Spirit Temple GQ Throne Cross Room Left Cow": "True",
+            "Spirit Temple GQ Throne Cross Room Right Cow": "True",
+            "Spirit Temple GQ GS Child Bridge": "True",
+            "Spirit Temple GQ GS Shortcut Room": "True",
+            "Spirit Temple GQ GS Hall After Sun Block Room": "True",
+            "Spirit Temple GQ GS Rolling Boulder Room": "True",
+            "Spirit Temple GQ GS Throne Cross Room": "True",
+            "Spirit Temple GQ GS Shifting Walls": "True",
+            "Spirit Temple GQ GS Top Room": "True",
+            "Spirit Temple GQ GS Statue Head": "True"
+        },
+        "exits": {
+            "Spirit Temple Boss Door": "True"
+        }
+    }
+]

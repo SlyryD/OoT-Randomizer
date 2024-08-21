@@ -10,7 +10,11 @@ from collections.abc import Callable, Iterable
 from typing import Optional, Any
 
 from Cutscenes import patch_cutscenes
+from Dungeon import DungeonType
 from Entrance import Entrance
+from GenerateLocationList import generate_location_list
+from GetActors import get_actor_list
+from GQ import get_gq_scenes, get_gq_json, fix_gq_scene_data, fix_gq_room_data
 from HintList import get_hint
 from Hints import GossipText, HintArea, write_gossip_stone_hints, build_altar_hints, \
         build_ganon_text, build_misc_item_hints, build_misc_location_hints, get_simple_hint_no_prefix, get_item_generic_name
@@ -24,10 +28,11 @@ from Messages import read_messages, update_message_by_id, read_shop_items, updat
         add_item_messages, repack_messages, shuffle_messages, \
         get_message_by_id, TextCode, new_messages, COLOR_MAP
 from OcarinaSongs import patch_songs
-from MQ import patch_files, File, update_dmadata, insert_space, add_relocations
+from MQ import patch_files, File, update_dmadata, insert_space, add_relocations, get_mq_scenes, get_mq_json, fix_mq_scene_data, fix_mq_room_data
 from Rom import Rom
-from SaveContext import SaveContext, Scenes, FlagType
-from SceneFlags import build_xflag_tables, build_xflags_from_world, get_alt_list_bytes
+from SaveContext import SaveContext, FlagType
+from Scenes import Scenes
+from SceneFlags import build_xflag_tables, build_xflags_from_world, get_alt_list_bytes, get_collectible_flag_table_bytes
 from Sounds import move_audiobank_table
 from Spoiler import Spoiler
 from TextBox import line_wrap
@@ -302,7 +307,7 @@ def patch_rom(spoiler: Spoiler, world: World, rom: Rom) -> Rom:
     rom.write_byte(0x253C0E2, 0x03)  # Moves sheik from pedestal
 
     # Fix Ice Cavern Alcove Camera
-    if not world.dungeon_mq['Ice Cavern']:
+    if world.dungeon_mq['Ice Cavern'] == DungeonType.VANILLA:
         rom.write_byte(0x2BECA25, 0x01)
         rom.write_byte(0x2BECA2D, 0x01)
 
@@ -335,10 +340,10 @@ def patch_rom(spoiler: Spoiler, world: World, rom: Rom) -> Rom:
     rom.write_bytes(0x94FCDD, [0x08, 0x39, 0x39])
 
     # Remove locked door to Boss Key Chest in Fire Temple
-    if not world.keysanity and not world.dungeon_mq['Fire Temple']:
+    if not world.keysanity and world.dungeon_mq['Fire Temple'] == DungeonType.VANILLA:
         rom.write_byte(0x22D82B7, 0x3F)
     # Remove the unused locked door in water temple
-    if not world.dungeon_mq['Water Temple']:
+    if world.dungeon_mq['Water Temple'] == DungeonType.VANILLA:
         rom.write_byte(0x25B8197, 0x3F)
 
     if world.settings.free_bombchu_drops:
@@ -586,7 +591,7 @@ def patch_rom(spoiler: Spoiler, world: World, rom: Rom) -> Rom:
     rom.write_bytes(0xE304F0, [0x24, 0x0E, 0x00, 0x01])
 
     # Fix Vanilla Dodongo's Cavern Gossip Stone to not use a permanent flag for the fairy
-    if not world.dungeon_mq['Dodongos Cavern']:
+    if world.dungeon_mq['Dodongos Cavern'] == DungeonType.VANILLA:
         rom.write_byte(0x1F281FE, 0x38)
 
     # Fix "...???" textbox outside Child Colossus Fairy to use the right flag and disappear once the wall is destroyed
@@ -849,81 +854,81 @@ def patch_rom(spoiler: Spoiler, world: World, rom: Rom) -> Rom:
 
     if 'Deku Tree' in world.settings.dungeon_shortcuts:
         # Deku Tree, flags are the same between vanilla/MQ
-        save_context.write_permanent_flag(Scenes.DEKU_TREE, FlagType.SWITCH, 0x1, 0x01)  # Deku Block down
-        save_context.write_permanent_flag(Scenes.DEKU_TREE, FlagType.CLEAR,  0x2, 0x02)  # Deku 231/312
-        save_context.write_permanent_flag(Scenes.DEKU_TREE, FlagType.SWITCH, 0x3, 0x20)  # Deku 1st Web
-        save_context.write_permanent_flag(Scenes.DEKU_TREE, FlagType.SWITCH, 0x3, 0x40)  # Deku 2nd Web
+        save_context.write_permanent_flag(Scenes.DEKU_TREE.id, FlagType.SWITCH, 0x1, 0x01)  # Deku Block down
+        save_context.write_permanent_flag(Scenes.DEKU_TREE.id, FlagType.CLEAR,  0x2, 0x02)  # Deku 231/312
+        save_context.write_permanent_flag(Scenes.DEKU_TREE.id, FlagType.SWITCH, 0x3, 0x20)  # Deku 1st Web
+        save_context.write_permanent_flag(Scenes.DEKU_TREE.id, FlagType.SWITCH, 0x3, 0x40)  # Deku 2nd Web
 
     if 'Dodongos Cavern' in world.settings.dungeon_shortcuts:
         # Dodongo's Cavern, flags are the same between vanilla/MQ
-        save_context.write_permanent_flag(Scenes.DODONGOS_CAVERN, FlagType.SWITCH, 0x3, 0x80)  # DC Entrance Mud Wall
-        save_context.write_permanent_flag(Scenes.DODONGOS_CAVERN, FlagType.SWITCH, 0x0, 0x04)  # DC Mouth
+        save_context.write_permanent_flag(Scenes.DODONGOS_CAVERN.id, FlagType.SWITCH, 0x3, 0x80)  # DC Entrance Mud Wall
+        save_context.write_permanent_flag(Scenes.DODONGOS_CAVERN.id, FlagType.SWITCH, 0x0, 0x04)  # DC Mouth
         # Extra permanent flag in MQ for the child route
-        if world.dungeon_mq['Dodongos Cavern']:
-            save_context.write_permanent_flag(Scenes.DODONGOS_CAVERN, FlagType.SWITCH, 0x0, 0x02)  # Armos wall switch
+        if world.dungeon_mq['Dodongos Cavern'] == DungeonType.MQ:
+            save_context.write_permanent_flag(Scenes.DODONGOS_CAVERN.id, FlagType.SWITCH, 0x0, 0x02)  # Armos wall switch
 
     if 'Jabu Jabus Belly' in world.settings.dungeon_shortcuts:
         # Jabu
-        if not world.dungeon_mq['Jabu Jabus Belly']:
-            save_context.write_permanent_flag(Scenes.JABU_JABU, FlagType.SWITCH, 0x0, 0x20)  # Jabu Pathway down
+        if world.dungeon_mq['Jabu Jabus Belly'] == DungeonType.VANILLA:
+            save_context.write_permanent_flag(Scenes.JABU_JABU.id, FlagType.SWITCH, 0x0, 0x20)  # Jabu Pathway down
         else:
-            save_context.write_permanent_flag(Scenes.JABU_JABU, FlagType.SWITCH, 0x1, 0x20)  # Jabu Lobby Slingshot Door open
-            save_context.write_permanent_flag(Scenes.JABU_JABU, FlagType.SWITCH, 0x0, 0x20)  # Jabu Pathway down
-            save_context.write_permanent_flag(Scenes.JABU_JABU, FlagType.CLEAR,  0x2, 0x01)  # Jabu Red Slimy Thing defeated
-            save_context.write_permanent_flag(Scenes.JABU_JABU, FlagType.SWITCH, 0x2, 0x08)  # Jabu Red Slimy Thing not in front of boss lobby
-            save_context.write_permanent_flag(Scenes.JABU_JABU, FlagType.SWITCH, 0x1, 0x10)  # Jabu Boss Door Switch Activated
+            save_context.write_permanent_flag(Scenes.JABU_JABU.id, FlagType.SWITCH, 0x1, 0x20)  # Jabu Lobby Slingshot Door open
+            save_context.write_permanent_flag(Scenes.JABU_JABU.id, FlagType.SWITCH, 0x0, 0x20)  # Jabu Pathway down
+            save_context.write_permanent_flag(Scenes.JABU_JABU.id, FlagType.CLEAR,  0x2, 0x01)  # Jabu Red Slimy Thing defeated
+            save_context.write_permanent_flag(Scenes.JABU_JABU.id, FlagType.SWITCH, 0x2, 0x08)  # Jabu Red Slimy Thing not in front of boss lobby
+            save_context.write_permanent_flag(Scenes.JABU_JABU.id, FlagType.SWITCH, 0x1, 0x10)  # Jabu Boss Door Switch Activated
 
     if 'Forest Temple' in world.settings.dungeon_shortcuts:
         # Forest, flags are the same between vanilla/MQ
-        save_context.write_permanent_flag(Scenes.FOREST_TEMPLE, FlagType.SWITCH, 0x0, 0x10)  # Forest Elevator up
-        save_context.write_permanent_flag(Scenes.FOREST_TEMPLE, FlagType.SWITCH, 0x1, 0x01 + 0x02 + 0x04)  # Forest Basement Puzzle Done
+        save_context.write_permanent_flag(Scenes.FOREST_TEMPLE.id, FlagType.SWITCH, 0x0, 0x10)  # Forest Elevator up
+        save_context.write_permanent_flag(Scenes.FOREST_TEMPLE.id, FlagType.SWITCH, 0x1, 0x01 + 0x02 + 0x04)  # Forest Basement Puzzle Done
 
     if 'Fire Temple' in world.settings.dungeon_shortcuts:
         # Fire, flags are the same between vanilla/MQ
-        save_context.write_permanent_flag(Scenes.FIRE_TEMPLE, FlagType.SWITCH, 0x2, 0x40)  # Fire Pillar down
+        save_context.write_permanent_flag(Scenes.FIRE_TEMPLE.id, FlagType.SWITCH, 0x2, 0x40)  # Fire Pillar down
 
     if 'Spirit Temple' in world.settings.dungeon_shortcuts:
         # Spirit
-        if not world.dungeon_mq['Spirit Temple']:
-            save_context.write_permanent_flag(Scenes.SPIRIT_TEMPLE, FlagType.SWITCH, 0x1, 0x80)  # Spirit Chains
-            save_context.write_permanent_flag(Scenes.SPIRIT_TEMPLE, FlagType.SWITCH, 0x2, 0x02 + 0x08 + 0x10)  # Spirit main room elevator (N block, Rusted Switch, E block)
-            save_context.write_permanent_flag(Scenes.SPIRIT_TEMPLE, FlagType.SWITCH, 0x3, 0x10)  # Spirit Face
+        if world.dungeon_mq['Spirit Temple'] == DungeonType.VANILLA:
+            save_context.write_permanent_flag(Scenes.SPIRIT_TEMPLE.id, FlagType.SWITCH, 0x1, 0x80)  # Spirit Chains
+            save_context.write_permanent_flag(Scenes.SPIRIT_TEMPLE.id, FlagType.SWITCH, 0x2, 0x02 + 0x08 + 0x10)  # Spirit main room elevator (N block, Rusted Switch, E block)
+            save_context.write_permanent_flag(Scenes.SPIRIT_TEMPLE.id, FlagType.SWITCH, 0x3, 0x10)  # Spirit Face
         else:
-            save_context.write_permanent_flag(Scenes.SPIRIT_TEMPLE, FlagType.SWITCH, 0x2, 0x10)  # Spirit Bombchu Boulder
-            save_context.write_permanent_flag(Scenes.SPIRIT_TEMPLE, FlagType.SWITCH, 0x2, 0x02)  # Spirit Silver Block
-            save_context.write_permanent_flag(Scenes.SPIRIT_TEMPLE, FlagType.SWITCH, 0x1, 0x80)  # Spirit Chains
-            save_context.write_permanent_flag(Scenes.SPIRIT_TEMPLE, FlagType.SWITCH, 0x3, 0x10)  # Spirit Face
+            save_context.write_permanent_flag(Scenes.SPIRIT_TEMPLE.id, FlagType.SWITCH, 0x2, 0x10)  # Spirit Bombchu Boulder
+            save_context.write_permanent_flag(Scenes.SPIRIT_TEMPLE.id, FlagType.SWITCH, 0x2, 0x02)  # Spirit Silver Block
+            save_context.write_permanent_flag(Scenes.SPIRIT_TEMPLE.id, FlagType.SWITCH, 0x1, 0x80)  # Spirit Chains
+            save_context.write_permanent_flag(Scenes.SPIRIT_TEMPLE.id, FlagType.SWITCH, 0x3, 0x10)  # Spirit Face
 
     if 'Shadow Temple' in world.settings.dungeon_shortcuts:
         # Shadow
-        if not world.dungeon_mq['Shadow Temple']:
-            save_context.write_permanent_flag(Scenes.SHADOW_TEMPLE, FlagType.SWITCH, 0x0, 0x08)  # Shadow Truthspinner
-            save_context.write_permanent_flag(Scenes.SHADOW_TEMPLE, FlagType.SWITCH, 0x0, 0x20)  # Shadow Boat Block
-            save_context.write_permanent_flag(Scenes.SHADOW_TEMPLE, FlagType.SWITCH, 0x1, 0x01)  # Shadow Bird Bridge
+        if world.dungeon_mq['Shadow Temple'] == DungeonType.VANILLA:
+            save_context.write_permanent_flag(Scenes.SHADOW_TEMPLE.id, FlagType.SWITCH, 0x0, 0x08)  # Shadow Truthspinner
+            save_context.write_permanent_flag(Scenes.SHADOW_TEMPLE.id, FlagType.SWITCH, 0x0, 0x20)  # Shadow Boat Block
+            save_context.write_permanent_flag(Scenes.SHADOW_TEMPLE.id, FlagType.SWITCH, 0x1, 0x01)  # Shadow Bird Bridge
         else:
-            save_context.write_permanent_flag(Scenes.SHADOW_TEMPLE, FlagType.SWITCH, 0x2, 0x08)  # Shadow Truthspinner
-            save_context.write_permanent_flag(Scenes.SHADOW_TEMPLE, FlagType.SWITCH, 0x3, 0x20)  # Shadow Fire Arrow Platform
-            save_context.write_permanent_flag(Scenes.SHADOW_TEMPLE, FlagType.SWITCH, 0x3, 0x80)  # Shadow Spinning Blades room Skulltulas defeated
-            save_context.write_permanent_flag(Scenes.SHADOW_TEMPLE, FlagType.CLEAR,  0x3, 0x40)  # Shadow Spinning Blades room Skulltulas defeated
-            save_context.write_permanent_flag(Scenes.SHADOW_TEMPLE, FlagType.SWITCH, 0x0, 0x20)  # Shadow Boat Block
-            save_context.write_permanent_flag(Scenes.SHADOW_TEMPLE, FlagType.SWITCH, 0x1, 0x01)  # Shadow Bird Bridge
+            save_context.write_permanent_flag(Scenes.SHADOW_TEMPLE.id, FlagType.SWITCH, 0x2, 0x08)  # Shadow Truthspinner
+            save_context.write_permanent_flag(Scenes.SHADOW_TEMPLE.id, FlagType.SWITCH, 0x3, 0x20)  # Shadow Fire Arrow Platform
+            save_context.write_permanent_flag(Scenes.SHADOW_TEMPLE.id, FlagType.SWITCH, 0x3, 0x80)  # Shadow Spinning Blades room Skulltulas defeated
+            save_context.write_permanent_flag(Scenes.SHADOW_TEMPLE.id, FlagType.CLEAR,  0x3, 0x40)  # Shadow Spinning Blades room Skulltulas defeated
+            save_context.write_permanent_flag(Scenes.SHADOW_TEMPLE.id, FlagType.SWITCH, 0x0, 0x20)  # Shadow Boat Block
+            save_context.write_permanent_flag(Scenes.SHADOW_TEMPLE.id, FlagType.SWITCH, 0x1, 0x01)  # Shadow Bird Bridge
 
     if world.region_has_shortcuts('King Dodongo Boss Room'):
-        save_context.write_permanent_flag(Scenes.KING_DODONGO_LOBBY, FlagType.SWITCH, 0x3, 0x02)  # DC Boss Floor
+        save_context.write_permanent_flag(Scenes.DODONGOS_CAVERN_BOSS.id, FlagType.SWITCH, 0x3, 0x02)  # DC Boss Floor
 
     set_spirit_shortcut_actors(rom) # Change elevator starting position to avoid waiting a half cycle from the temple entrance
 
     if world.settings.plant_beans:
-        save_context.write_permanent_flag(Scenes.GRAVEYARD, FlagType.SWITCH, 0x3, 0x08)  # Plant Graveyard bean
-        save_context.write_permanent_flag(Scenes.ZORAS_RIVER, FlagType.SWITCH, 0x3, 0x08)  # Plant Zora's River bean
-        save_context.write_permanent_flag(Scenes.KOKIRI_FOREST, FlagType.SWITCH, 0x2, 0x02)  # Plant Kokiri Forest bean
-        save_context.write_permanent_flag(Scenes.LAKE_HYLIA, FlagType.SWITCH, 0x3, 0x02)  # Plant Lake Hylia bean
-        save_context.write_permanent_flag(Scenes.GERUDO_VALLEY, FlagType.SWITCH, 0x3, 0x08)  # Plant Gerudo Valley bean
-        save_context.write_permanent_flag(Scenes.LOST_WOODS, FlagType.SWITCH, 0x3, 0x10)  # Plant Lost Woods bridge bean
-        save_context.write_permanent_flag(Scenes.LOST_WOODS, FlagType.SWITCH, 0x1, 0x04)  # Plant Lost Woods theater bean
-        save_context.write_permanent_flag(Scenes.DESERT_COLOSSUS, FlagType.SWITCH, 0x0, 0x1)  # Plant Desert Colossus bean
-        save_context.write_permanent_flag(Scenes.DEATH_MOUNTAIN_TRAIL, FlagType.SWITCH, 0x3, 0x40)  # Plant Death Mountain Trail bean
-        save_context.write_permanent_flag(Scenes.DEATH_MOUNTAIN_CRATER, FlagType.SWITCH, 0x3, 0x08)  # Plant Death Mountain Crater bean
+        save_context.write_permanent_flag(Scenes.GRAVEYARD.id, FlagType.SWITCH, 0x3, 0x08)  # Plant Graveyard bean
+        save_context.write_permanent_flag(Scenes.ZORAS_RIVER.id, FlagType.SWITCH, 0x3, 0x08)  # Plant Zora's River bean
+        save_context.write_permanent_flag(Scenes.KOKIRI_FOREST.id, FlagType.SWITCH, 0x2, 0x02)  # Plant Kokiri Forest bean
+        save_context.write_permanent_flag(Scenes.LAKE_HYLIA.id, FlagType.SWITCH, 0x3, 0x02)  # Plant Lake Hylia bean
+        save_context.write_permanent_flag(Scenes.GERUDO_VALLEY.id, FlagType.SWITCH, 0x3, 0x08)  # Plant Gerudo Valley bean
+        save_context.write_permanent_flag(Scenes.LOST_WOODS.id, FlagType.SWITCH, 0x3, 0x10)  # Plant Lost Woods bridge bean
+        save_context.write_permanent_flag(Scenes.LOST_WOODS.id, FlagType.SWITCH, 0x1, 0x04)  # Plant Lost Woods theater bean
+        save_context.write_permanent_flag(Scenes.DESERT_COLOSSUS.id, FlagType.SWITCH, 0x0, 0x1)  # Plant Desert Colossus bean
+        save_context.write_permanent_flag(Scenes.DEATH_MOUNTAIN_TRAIL.id, FlagType.SWITCH, 0x3, 0x40)  # Plant Death Mountain Trail bean
+        save_context.write_permanent_flag(Scenes.DEATH_MOUNTAIN_CRATER.id, FlagType.SWITCH, 0x3, 0x08)  # Plant Death Mountain Crater bean
 
     save_context.write_bits(0x00D4 + 0x05 * 0x1C + 0x04 + 0x1, 0x01) # Water temple switch flag (Ruto)
     save_context.write_bits(0x00D4 + 0x51 * 0x1C + 0x04 + 0x2, 0x08) # Hyrule Field switch flag (Owl)
@@ -997,7 +1002,7 @@ def patch_rom(spoiler: Spoiler, world: World, rom: Rom) -> Rom:
     save_context.write_bits(0x0EEB, 0x01)  # "Entered Dodongo's Cavern"
     save_context.write_bits(0x0F08, 0x08)  # "Entered Hyrule Castle"
 
-    if world.dungeon_mq['Shadow Temple']:
+    if world.dungeon_mq['Shadow Temple'] == DungeonType.MQ:
         save_context.write_bits(0x019F, 0x80)  # "Turn On Clear Wall Blocking Hover Boots Room"
 
     # Set the number of chickens to collect
@@ -1027,7 +1032,7 @@ def patch_rom(spoiler: Spoiler, world: World, rom: Rom) -> Rom:
             owned_flags += 0x1 << (child_trade_items.index(item_name))
         if item_name in trade_items:
             owned_flags += 0x1 << (trade_items.index(item_name) + 11)
-    save_context.write_permanent_flags(Scenes.DEATH_MOUNTAIN_TRAIL, FlagType.UNK00, owned_flags)
+    save_context.write_permanent_flags(Scenes.DEATH_MOUNTAIN_TRAIL.id, FlagType.UNK00, owned_flags)
 
     # Mark unreachable trade-ins as traded. Only applicable with trade quest shuffle off,
     # and only practically affects the Blue Potion purchase from Granny's Potion Shop.
@@ -1055,7 +1060,7 @@ def patch_rom(spoiler: Spoiler, world: World, rom: Rom) -> Rom:
                 else:
                     return traded_flags
             return traded_flags
-        save_context.write_permanent_flags(Scenes.GORON_CITY, FlagType.UNK00, calculate_traded_flags(world))
+        save_context.write_permanent_flags(Scenes.GORON_CITY.id, FlagType.UNK00, calculate_traded_flags(world))
 
     if world.settings.complete_mask_quest:
         rom.write_byte(rom.sym('COMPLETE_MASK_QUEST'), 1)
@@ -1223,7 +1228,7 @@ def patch_rom(spoiler: Spoiler, world: World, rom: Rom) -> Rom:
             save_context.give_item(world, f'Silver Rupee ({puzzle})', float('inf'))
 
     if world.settings.shuffle_smallkeys == 'vanilla':
-        if world.dungeon_mq['Spirit Temple']:
+        if world.dungeon_mq['Spirit Temple'] == DungeonType.MQ:
             save_context.addresses['keys']['spirit'].value = 3
         if 'Shadow Temple' in world.settings.dungeon_shortcuts:
             save_context.addresses['keys']['shadow'].value = 2
@@ -1273,34 +1278,75 @@ def patch_rom(spoiler: Spoiler, world: World, rom: Rom) -> Rom:
         rom.write_bytes(0x21F60DE, [0x05, 0xF0])
 
     # patch mq scenes
-    mq_scenes = []
-    if world.dungeon_mq['Deku Tree']:
-        mq_scenes.append(0)
-    if world.dungeon_mq['Dodongos Cavern']:
-        mq_scenes.append(1)
-    if world.dungeon_mq['Jabu Jabus Belly']:
-        mq_scenes.append(2)
-    if world.dungeon_mq['Forest Temple']:
-        mq_scenes.append(3)
-    if world.dungeon_mq['Fire Temple']:
-        mq_scenes.append(4)
-    if world.dungeon_mq['Water Temple']:
-        mq_scenes.append(5)
-    if world.dungeon_mq['Spirit Temple']:
-        mq_scenes.append(6)
-    if world.dungeon_mq['Shadow Temple']:
-        mq_scenes.append(7)
-    if world.dungeon_mq['Bottom of the Well']:
-        mq_scenes.append(8)
-    if world.dungeon_mq['Ice Cavern']:
-        mq_scenes.append(9)
-    # Scene 10 has no layout changes, so it doesn't need to be patched
-    if world.dungeon_mq['Gerudo Training Ground']:
-        mq_scenes.append(11)
-    if world.dungeon_mq['Ganons Castle']:
-        mq_scenes.append(13)
+    mq_scenes = get_mq_scenes(world)
+    if len(mq_scenes) > 0:
+        patch_files(rom, mq_scenes, get_mq_json, fix_mq_scene_data, fix_mq_room_data)
 
-    patch_files(rom, mq_scenes)
+    # patch gq scenes
+    gq_scenes = get_gq_scenes(world)
+    if len(gq_scenes) > 0:
+        patch_files(rom, gq_scenes, get_gq_json, fix_gq_scene_data, fix_gq_room_data)
+
+    # TODO.GQ: Remove
+    scenes_to_generate = [x for x in range(14) if x != 12]
+    vanilla_scenes = [idx for idx,dungeon_type in enumerate(world.dungeon_mq.values()) if dungeon_type == DungeonType.VANILLA]
+    if len(vanilla_scenes) == 13:
+        generate_location_list(rom, scenes_to_generate, 'Vanilla', 'Vanilla')
+    if len(mq_scenes) == 12:
+        generate_location_list(rom, scenes_to_generate, 'Master Quest', 'MQ')
+    if len(gq_scenes) == 13:
+        generate_location_list(rom, scenes_to_generate, 'Gold Quest', 'GQ')
+
+    # TODO.GQ: Remove
+    def get_switches(rom: Rom, actor_id: int, actor: int, scene: int, room_id: int, setup_num: int, actor_num: int) -> tuple[str, int, int, int]:
+        if actor_id == 0x00E6:
+            actor_variable = rom.read_int16(actor + 0x0E)
+            switch_type = actor_variable & 0x00FF
+            if switch_type == 0:
+                switch_description = 'Blue Floor'
+            elif switch_type == 1 or switch_type == 2:
+                switch_description = 'Yellow Floor'
+            elif switch_type == 3 or switch_type == 4:
+                switch_description = 'Uvula'
+            else:
+                switch_description = 'Unknown Switch'
+            return [switch_description, scene, room_id, setup_num]
+        if actor_id == 0x012A:
+            actor_variable = rom.read_int16(actor + 0x0E)
+            switch_type = actor_variable & 0x000F
+            switch_toggle = (actor_variable & 0x0010) >> 4
+            switch_reset = (actor_variable & 0x0020) >> 5
+            if switch_type == 0:
+                if switch_toggle == 0:
+                    if switch_reset == 0:
+                        switch_description = 'Yellow Floor'
+                    else:
+                        switch_description = 'Blue Floor'
+                else:
+                    switch_description = 'Red Floor'
+            elif switch_type == 1:
+                switch_description = 'Rusted Floor'
+            elif switch_type == 2:
+                if switch_toggle == 0:
+                    switch_description = 'Gold Eye'
+                else:
+                    switch_description = 'Silver Eye'
+            elif switch_type == 3 or switch_type == 4:
+                if switch_toggle == 0:
+                    switch_description = 'On/Off Crystal'
+                else:
+                    switch_description = 'Toggle Crystal'
+            else:
+                switch_description = 'Unknown Switch'
+            return [switch_description, scene, room_id, setup_num]
+    switches = get_actor_list(rom, get_switches)
+    scenes_by_switch = {}
+    for switch in switches.values():
+        if switch[0] not in scenes_by_switch:
+            scenes_by_switch[switch[0]] = []
+        if switch[1] not in scenes_by_switch[switch[0]]:
+            scenes_by_switch[switch[0]].append(switch[1])
+    print(scenes_by_switch)
 
     # Set the hylian shield discount for the seed
     possible_discounts = [0x0005, 0x000A, 0x000F, 0x0014, 0x0019, 0x001E, 0x0023, 0x0028]
@@ -1403,7 +1449,7 @@ def patch_rom(spoiler: Spoiler, world: World, rom: Rom) -> Rom:
         rom.write_bytes(rom.sym('CFG_BIGOCTO_OVERRIDE_KEY'), override_key_struct.pack(scene, type, default))
 
     # use faster jabu elevator
-    if not world.dungeon_mq['Jabu Jabus Belly'] and world.settings.shuffle_scrubs == 'off':
+    if world.dungeon_mq['Jabu Jabus Belly'] == DungeonType.VANILLA and world.settings.shuffle_scrubs == 'off':
         symbol = rom.sym('JABU_ELEVATOR_ENABLE')
         rom.write_byte(symbol, 0x01)
 
@@ -1926,7 +1972,7 @@ def patch_rom(spoiler: Spoiler, world: World, rom: Rom) -> Rom:
 
     # Move Ganon's Castle's Zelda's Lullaby Chest back so is reachable if large
     if world.settings.correct_chest_appearances == 'classic' or world.settings.correct_chest_appearances == 'both':
-        if not world.dungeon_mq['Ganons Castle']:
+        if world.dungeon_mq['Ganons Castle'] == DungeonType.VANILLA:
             chest_name = 'Ganons Castle Light Trial Lullaby Chest'
             location = world.get_location(chest_name)
             item = read_rom_item(rom, (location.item.looks_like_item or location.item).index)
@@ -1934,7 +1980,7 @@ def patch_rom(spoiler: Spoiler, world: World, rom: Rom) -> Rom:
                 rom.write_int16(0x321B176, 0xFC40) # original 0xFC48
 
         # Move Spirit Temple Compass Chest if it is a small chest so it is reachable with hookshot
-        if not world.dungeon_mq['Spirit Temple']:
+        if world.dungeon_mq['Spirit Temple'] == DungeonType.VANILLA:
             chest_name = 'Spirit Temple Compass Chest'
             chest_address = 0x2B6B07C
             location = world.get_location(chest_name)
@@ -1944,7 +1990,7 @@ def patch_rom(spoiler: Spoiler, world: World, rom: Rom) -> Rom:
                 rom.write_int16(chest_address + 6, 0xFABC) # Z pos
 
         # Move Silver Gauntlets chest if it is small so it is reachable from Spirit Hover Seam
-        if world.settings.logic_rules != 'glitchless':
+        if world.settings.logic_rules != 'glitchless' and world.dungeon_mq['Spirit Temple'] != DungeonType.GQ:
             chest_name = 'Spirit Temple Silver Gauntlets Chest'
             chest_address_0 = 0x21A02D0  # Address in setup 0
             chest_address_2 = 0x21A06E4  # Address in setup 2
@@ -2019,8 +2065,9 @@ def patch_rom(spoiler: Spoiler, world: World, rom: Rom) -> Rom:
                     compass_message = f"\x13\x75\x08You found the \x05\x41Compass\x05\x40\x01for {dungeon_name}\x05\x40!\x01It holds the \x05{COLOR_MAP[REWARD_COLORS[dungeon_reward]]}{dungeon_reward}\x05\x40!\x09"
                 if world.settings.shuffle_dungeon_rewards != 'dungeon':
                     update_message_by_id(messages, compass_id, compass_message, allow_duplicates=True)
-                if world.settings.mq_dungeons_mode == 'random' or world.settings.mq_dungeons_count != 0 and world.settings.mq_dungeons_count != 12:
-                    map_message = f"\x13\x76\x08You found the \x05\x41Dungeon Map\x05\x40\x01for {dungeon_name}\x05\x40!\x01It\'s {'masterful' if world.dungeon_mq[dungeon.name] else 'ordinary'}!\x09"
+                if world.settings.mq_dungeons_mode == 'random' or world.settings.mq_dungeons_count != 0 and world.settings.mq_dungeons_count != 12 \
+                    or world.settings.gq_dungeons_mode == 'random' or world.settings.gq_dungeons_count != 0 and world.settings.gq_dungeons_count != 12:
+                    map_message = f"\x13\x76\x08You found the \x05\x41Dungeon Map\x05\x40\x01for {dungeon_name}\x05\x40!\x01It\'s {'golden' if world.dungeon_mq[dungeon.name] == 2 else 'masterful' if world.dungeon_mq[dungeon.name] == 1 else 'ordinary'}!\x09"
                     update_message_by_id(messages, map_id, map_message, allow_duplicates=True)
 
     # Set hints on the altar inside ToT
@@ -2032,10 +2079,10 @@ def patch_rom(spoiler: Spoiler, world: World, rom: Rom) -> Rom:
 
     # Fix Dead Hand spawn coordinates in vanilla shadow temple and bottom of the well to be the exact centre of the room
     # This prevents the extremely small possibility of Dead Hand spawning outside of collision
-    if not world.dungeon_mq['Shadow Temple']:
+    if world.dungeon_mq['Shadow Temple'] == DungeonType.VANILLA:
         rom.write_int16(0x27DC0AE, 0xF67E) # x-coordinate spawn in shadow temple
         rom.write_int16(0x27DC0B2, 0xFE6B) # z-coordinate spawn in shadow temple
-    if not world.dungeon_mq['Bottom of the Well']:
+    if world.dungeon_mq['Bottom of the Well'] == DungeonType.VANILLA:
         rom.write_int16(0x32FB08E, 0x0500) # x-coordinate spawn in bottom of the well
         rom.write_int16(0x32FB092, 0x00D2) # z-coordinate spawn in bottom of the well
 
@@ -2401,126 +2448,51 @@ chestTypeMap: dict[int, list[int]] = {
 }
 
 
-def room_get_actors(rom: Rom, actor_func: Callable[[Rom, int, int, int], Any], room_data: int, scene: int,
-                    alternate: Optional[int] = None) -> dict[int, Any]:
-    actors = {}
-    room_start = alternate if alternate else room_data
-    command = 0
-    while command != 0x14:  # 0x14 = end header
-        command = rom.read_byte(room_data)
-        if command == 0x01:  # actor list
-            actor_count = rom.read_byte(room_data + 1)
-            actor_list = room_start + (rom.read_int32(room_data + 4) & 0x00FFFFFF)
-            for _ in range(0, actor_count):
-                actor_id = rom.read_int16(actor_list)
-                entry = actor_func(rom, actor_id, actor_list, scene)
-                if entry:
-                    actors[actor_list] = entry
-                actor_list = actor_list + 16
-        if command == 0x18:  # Alternate header list
-            header_list = room_start + (rom.read_int32(room_data + 4) & 0x00FFFFFF)
-            for alt_id in range(0, 3):
-                header_data = room_start + (rom.read_int32(header_list) & 0x00FFFFFF)
-                if header_data != 0 and not alternate:
-                    actors.update(room_get_actors(rom, actor_func, header_data, scene, room_start))
-                header_list = header_list + 4
-        room_data = room_data + 8
-    return actors
-
-
-def scene_get_actors(rom: Rom, actor_func: Callable[[Rom, int, int, int], Any], scene_data: int, scene: int,
-                     alternate: Optional[int] = None, processed_rooms: Optional[list[int]] = None) -> dict[int, Any]:
-    if processed_rooms is None:
-        processed_rooms = []
-    actors = {}
-    scene_start = alternate if alternate else scene_data
-    command = 0
-    while command != 0x14:  # 0x14 = end header
-        command = rom.read_byte(scene_data)
-        if command == 0x04:  # room list
-            room_count = rom.read_byte(scene_data + 1)
-            room_list = scene_start + (rom.read_int32(scene_data + 4) & 0x00FFFFFF)
-            for _ in range(0, room_count):
-                room_data = rom.read_int32(room_list)
-
-                if room_data not in processed_rooms:
-                    actors.update(room_get_actors(rom, actor_func, room_data, scene))
-                    processed_rooms.append(room_data)
-                room_list = room_list + 8
-        if command == 0x0E:  # transition actor list
-            actor_count = rom.read_byte(scene_data + 1)
-            actor_list = scene_start + (rom.read_int32(scene_data + 4) & 0x00FFFFFF)
-            for _ in range(0, actor_count):
-                actor_id = rom.read_int16(actor_list + 4)
-                entry = actor_func(rom, actor_id, actor_list, scene)
-                if entry:
-                    actors[actor_list] = entry
-                actor_list = actor_list + 16
-        if command == 0x18:  # Alternate header list
-            header_list = scene_start + (rom.read_int32(scene_data + 4) & 0x00FFFFFF)
-            for alt_id in range(0, 3):
-                header_data = scene_start + (rom.read_int32(header_list) & 0x00FFFFFF)
-                if header_data != 0 and not alternate:
-                    actors.update(scene_get_actors(rom, actor_func, header_data, scene, scene_start, processed_rooms))
-                header_list = header_list + 4
-
-        scene_data = scene_data + 8
-    return actors
-
-
-def get_actor_list(rom: Rom, actor_func: Callable[[Rom, int, int, int], Any]) -> dict[int, Any]:
-    actors = {}
-    scene_table = 0x00B71440
-    for scene in range(0x00, 0x65):
-        scene_data = rom.read_int32(scene_table + (scene * 0x14))
-        actors.update(scene_get_actors(rom, actor_func, scene_data, scene))
-    return actors
-
-
 def get_override_itemid(override_table: Iterable[OverrideEntry], scene: int, type: int, flags: int) -> Optional[int]:
     for entry in override_table:
         if entry[0] == scene and (entry[1] & 0x07) == type and entry[2] == flags:
             return entry[4]
     return None
 
-
 def remove_entrance_blockers(rom: Rom) -> None:
-    def remove_entrance_blockers_do(rom: Rom, actor_id: int, actor: int, scene: int) -> None:
+    def remove_entrance_blockers_do(rom: Rom, actor_id: int, actor: int, scene: int, room_id: int, setup_num: int, actor_num: int) -> None:
         if actor_id == 0x014E and scene == 97:
             actor_var = rom.read_int16(actor + 14)
             if actor_var == 0xFF01:
                 rom.write_int16(actor + 14, 0x0700)
     get_actor_list(rom, remove_entrance_blockers_do)
 
-
 def set_cow_id_data(rom: Rom, world: World) -> None:
-    def set_cow_id(rom: Rom, actor_id: int, actor: int, scene: int) -> None:
-        nonlocal last_scene
-        nonlocal cow_count
-        nonlocal last_actor
+    def set_cow_id(rom: Rom, actor_id: int, actor: int, scene: int, room_id: int, setup_num: int, actor_num: int):
+        nonlocal actors_by_scene
 
-        if actor_id == 0x01C6:  # Cow
-            if scene == last_scene and last_actor != actor:
-                cow_count += 1
-            else:
-                cow_count = 1
+        if actor_id == 0x01C6: #Cow
+            if scene not in actors_by_scene:
+                actors_by_scene[scene] = dict()
 
-            last_scene = scene
-            last_actor = actor
-            if world.dungeon_mq['Jabu Jabus Belly'] and scene == 2:  # If it's an MQ jabu cow
-                rom.write_int16(actor + 0x8, 1 if cow_count == 17 else 0)  # Give all wall cows ID 0, and set cow 11's ID to 1
-            else:
-                rom.write_int16(actor + 0x8, cow_count)
+            if actor not in actors_by_scene[scene]:
+                #Exclude all but one MQ Jabu cow
+                if scene == 2 and world.dungeon_mq['Jabu Jabus Belly'] == DungeonType.MQ and rom.read_int16(actor + 0x2) != 0xFB17:
+                    actors_by_scene[scene][actor] = 0
+                #Exclude GQ Jabu web cow
+                elif scene == 2 and world.dungeon_mq['Jabu Jabus Belly'] == DungeonType.GQ and rom.read_int16(actor + 0x2) == 0x0578:
+                    actors_by_scene[scene][actor] = 0
+                #Otherwise assign an ID based on number of shuffled cows in the scene so far
+                else:
+                    shuffled_actors = [cow for cow in actors_by_scene[scene] if actors_by_scene[scene][cow] != 0]
+                    actors_by_scene[scene][actor] = len(shuffled_actors) + 1
 
-    last_actor = -1
-    last_scene = -1
-    cow_count = 1
+            # Write cow id byte to 2-byte X rotation value, e.g., 0x0000 -> 0x0001, or 0xC000 -> 0xC001
+            rom.write_byte(actor + 0x9, actors_by_scene[scene][actor])
+
+    # map scene to cow actor to cow id
+    actors_by_scene = dict()
 
     get_actor_list(rom, set_cow_id)
 
 
 def set_grotto_shuffle_data(rom: Rom, world: World) -> None:
-    def override_grotto_data(rom: Rom, actor_id: int, actor: int, scene: int) -> None:
+    def override_grotto_data(rom: Rom, actor_id: int, actor: int, scene: int, room_id: int, setup_num: int, actor_num: int):
         if actor_id == 0x009B:  # Grotto
             actor_zrot = rom.read_int16(actor + 12)
             actor_var = rom.read_int16(actor + 14)
@@ -2544,7 +2516,7 @@ def set_grotto_shuffle_data(rom: Rom, world: World) -> None:
 
 
 def set_deku_salesman_data(rom: Rom) -> None:
-    def set_deku_salesman(rom: Rom, actor_id: int, actor: int, scene: int) -> None:
+    def set_deku_salesman(rom: Rom, actor_id: int, actor: int, scene: int, room_id: int, setup_num: int, actor_num: int):
         if actor_id == 0x0195:  # Salesman
             actor_var = rom.read_int16(actor + 14)
             if actor_var == 6:
@@ -2554,7 +2526,7 @@ def set_deku_salesman_data(rom: Rom) -> None:
 
 
 def set_jabu_stone_actors(rom: Rom, jabu_actor_type: int) -> None:
-    def set_jabu_stone_actor(rom: Rom, actor_id: int, actor: int, scene: int) -> None:
+    def set_jabu_stone_actor(rom: Rom, actor_id: int, actor: int, scene: int, room_id: int, setup_num: int, actor_num: int) -> None:
         if scene == 2 and actor_id == 0x008B: # Demo_Effect in Jabu Jabu
             actor_type = rom.read_byte(actor + 15)
             if actor_type == 0x15:
@@ -2564,7 +2536,7 @@ def set_jabu_stone_actors(rom: Rom, jabu_actor_type: int) -> None:
 
 
 def set_spirit_shortcut_actors(rom: Rom) -> None:
-    def set_spirit_shortcut(rom: Rom, actor_id: int, actor: int, scene: int) -> None:
+    def set_spirit_shortcut(rom: Rom, actor_id: int, actor: int, scene: int, room_id: int, setup_num: int, actor_num: int) -> None:
         if actor_id == 0x018e and scene == 6:  # raise initial elevator height
             rom.write_int16(actor + 4, 0x015E)
 
@@ -2572,7 +2544,7 @@ def set_spirit_shortcut_actors(rom: Rom) -> None:
 
 
 def move_fado_in_lost_woods(rom):
-    def move_fado(rom, actor_id, actor, scene):
+    def move_fado(rom: Rom, actor_id: int, actor: int, scene: int, room_id: int, setup_num: int, actor_num: int):
         if actor_id == 0x163 and scene == 0x5B: # move Fado to short stump
             rom.write_int16(actor + 2, 0xFBA6)
             rom.write_int16(actor + 4, 0x0000)
@@ -2594,7 +2566,7 @@ def move_fado_in_lost_woods(rom):
 # If ganons boss key is set to remove, returns ganons boss key doors
 # If pot/crate shuffle is enabled, returns the first ganon's boss key door so that it can be unlocked separately to allow access to the room w/ the pots..
 def get_doors_to_unlock(rom: Rom, world: World) -> dict[int, list[int]]:
-    def get_door_to_unlock(rom: Rom, actor_id: int, actor: int, scene: int) -> list[int]:
+    def get_door_to_unlock(rom: Rom, actor_id: int, actor: int, scene: int, room_id: int, setup_num: int, actor_num: int) -> list[int]:
         actor_var = rom.read_int16(actor + 14)
         door_type = actor_var >> 6
         switch_flag = actor_var & 0x003F
@@ -2774,8 +2746,8 @@ def configure_dungeon_info(rom: Rom, world: World) -> None:
 
     codes = ['Deku Tree', 'Dodongos Cavern', 'Jabu Jabus Belly', 'Forest Temple',
              'Fire Temple', 'Water Temple', 'Spirit Temple', 'Shadow Temple',
-             'Bottom of the Well', 'Ice Cavern', 'Tower (N/A)',
-             'Gerudo Training Ground', 'Hideout (N/A)', 'Ganons Castle']
+             'Bottom of the Well', 'Ice Cavern', 'Ganons Castle', # Ganons Tower
+             'Gerudo Training Ground', 'Thieves Hideout', 'Ganons Castle']
 
     dungeon_rewards = [0xff] * 14
     dungeon_reward_areas = bytearray()
@@ -2789,7 +2761,7 @@ def configure_dungeon_info(rom: Rom, world: World) -> None:
             if location.world.id == world.id and area.is_dungeon:
                 dungeon_rewards[codes.index(area.dungeon_name)] = boss_reward_index(location.item)
 
-    dungeon_is_mq = [1 if world.dungeon_mq.get(c) else 0 for c in codes]
+    dungeon_is_mq = [int(world.dungeon_mq.get(c)) for c in codes]
 
     rom.write_int32(rom.sym('CFG_DUNGEON_INFO_ENABLE'), 2)
     rom.write_int32(rom.sym('CFG_DUNGEON_INFO_MQ_ENABLE'), int(mq_enable))

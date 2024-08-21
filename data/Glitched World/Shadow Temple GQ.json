@@ -1,0 +1,39 @@
+[
+    {
+        "region_name": "Shadow Temple Entryway",
+        "dungeon": "Shadow Temple",
+        "locations": {
+            "Shadow Temple GQ Compass Chest": "True",
+            "Shadow Temple GQ Floating Bubbles Chest": "True",
+            "Shadow Temple GQ Dead Hand Chest": "True",
+            "Shadow Temple GQ Map Chest": "True",
+            "Shadow Temple GQ Early Gibdos Chest": "True",
+            "Shadow Temple GQ Falling Spikes Room Next To Wall Chest": "True",
+            "Shadow Temple GQ Falling Spikes Room Middle Chest": "True",
+            "Shadow Temple GQ Falling Spikes Room Next To Gate Chest": "True",
+            "Shadow Temple GQ Room Invisible Blades Right Chest": "True",
+            "Shadow Temple GQ Room Invisible Blades Left Chest": "True",
+            "Shadow Temple GQ Stalfos Room Chest": "True",
+            "Shadow Temple GQ Wind Hint Chest": "True",
+            "Shadow Temple GQ Room After Wind Left Chest": "True",
+            "Shadow Temple GQ Room After Wind Right Chest": "True",
+            "Shadow Temple GQ Room Invisible Floormaster Chest": "True",
+            "Shadow Temple GQ Room Spinning Pots Chest": "True",
+            "Shadow Temple GQ Room Boss Key Chest": "True",
+            "Shadow Temple GQ Room Stalfos Room Cow": "True",
+            "Shadow Temple GQ Room Wind Hint Cow": "True",
+            "Shadow Temple GQ Room Boat Room Cow": "True",
+            "Shadow Temple GQ GS FeelsAdsMan": "True",
+            "Shadow Temple GQ GS Circular Lobby": "True",
+            "Shadow Temple GQ GS Spinning Blades Room": "True",
+            "Shadow Temple GQ GS Chasm Room": "True",
+            "Shadow Temple GQ GS Falling Spikes Room": "True",
+            "Shadow Temple GQ GS Fan Room": "True",
+            "Shadow Temple GQ GS Boat Room": "True",
+            "Shadow Temple GQ GS Invisible Floormaster": "True"
+        },
+        "exits": {
+            "Shadow Temple Boss Door": "True"
+        }
+    }
+]

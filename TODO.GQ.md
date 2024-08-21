@@ -1,0 +1,5 @@
+- Patch more scenes
+- Read more scene data
+- Ganons Castle Door Locks
+- Ganons Castle Club Moblin Damage
+- Ganons Castle Water/Shadow/Spirit/Light Trial Chests

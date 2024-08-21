@@ -1,0 +1,28 @@
+[
+    {
+        "region_name": "Jabu Jabus Belly Beginning",
+        "dungeon": "Jabu Jabus Belly",
+        "locations": {
+            "Jabu Jabus Belly GQ Map Chest": "True",
+            "Jabu Jabus Belly GQ Compass Chest": "True",
+            "Jabu Jabus Belly GQ After Big Octo Chest": "True",
+            "Jabu Jabus Belly GQ Shaboms Chest": "True",
+            "Jabu Jabus Belly GQ Boomerang Chest": "True",
+            "Jabu Jabus Belly GQ Prolapsed Cow Room Chest": "True",
+            "Jabu Jabus Belly GQ Near Boss Standing Cow": "True",
+            "Jabu Jabus Belly GQ Near Boss Climbing Cow": "True",
+            "Jabu Jabus Belly GQ Prolapsed Cow": "True",
+            "Jabu Jabus Belly GQ GS DLC Room": "True",
+            "Jabu Jabus Belly GQ GS Before Big Octo": "True",
+            "Jabu Jabus Belly GQ GS Big Octo Room Top": "True",
+            "Jabu Jabus Belly GQ GS Esophagus Room": "True",
+            "Jabu Jabus Belly GQ GS Prolapsed Cow Room": "True",
+            "Jabu Jabus Belly GQ GS Elevator Room Top": "True",
+            "Jabu Jabus Belly GQ GS Near Boss": "True",
+            "Jabu Jabus Belly GQ GS Elevator Room Bottom": "True"
+        },
+        "exits": {
+            "Jabu Jabus Belly Boss Door": "True"
+        }
+    }
+]

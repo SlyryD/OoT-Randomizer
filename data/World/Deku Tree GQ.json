@@ -1,0 +1,85 @@
+[
+    {
+        "region_name": "Deku Tree Lobby",
+        "dungeon": "Deku Tree",
+        "locations": {
+            "Deku Tree GQ Lobby Chest": "here(can_use(Slingshot) or can_use(Bow))",
+            "Deku Tree GQ Kokiri Sword Chest": "
+                here(can_use(Slingshot) or can_use(Bow)) and
+                here(has_fire_source_with_torch)",
+            "Deku Tree GQ Compass Room Front Chest": "True",
+            "Deku Tree GQ Compass Chest": "has_fire_source_with_torch or can_use(Bow)",
+            "Deku Tree GQ Map Chest": "True",
+            "Deku Tree GQ Basement Crystal Switch Chest": "True",
+            "Deku Tree GQ After Spinning Log Chest": "True",
+            "Deku Tree GQ GS Lobby": "
+                is_adult or (Sticks or Kokiri_Sword or has_explosives or can_use(Dins_Fire) or
+                Slingshot or Boomerang)",
+            "Deku Tree GQ GS Compass Room": "can_use(Boomerang) or can_use(Hookshot)",
+            "Deku Tree GQ GS Basement Grate": "
+                is_adult or (Sticks or Kokiri_Sword or has_explosives or can_use(Dins_Fire) or
+                Slingshot or Boomerang)",
+            "Deku Tree GQ GS Spinning Log": "True",
+            "Deku Baba Sticks": "is_adult or Kokiri_Sword or Boomerang",
+            "Deku Baba Nuts": "
+                is_adult or Slingshot or Sticks or 
+                has_explosives or Kokiri_Sword or can_use(Dins_Fire)"
+        },
+        "exits": {
+            "KF Outside Deku Tree": "True",
+            "Deku Tree Basement Like Like Room": "here(can_use(Slingshot) or can_use(Bow))",
+            "Deku Tree Basement Ledge": "logic_deku_b1_skip or here(is_adult) or deku_tree_shortcuts"
+        }
+    },
+    {
+        "region_name": "Deku Tree Basement Like Like Room",
+        "dungeon": "Deku Tree",
+        "locations": {
+            "Deku Tree GQ GS Basement Like Like Room": "can_use(Boomerang) or can_use(Hookshot)"
+        },
+        "exits": {
+            "Deku Tree Basement Back Room": "here(has_fire_source_with_torch)",
+            "Deku Tree Lobby": "True"
+        }
+    },
+    {
+        "region_name": "Deku Tree Basement Back Room",
+        "dungeon": "Deku Tree",
+        "locations": {
+            "Deku Tree GQ Deku Back Room Scrub": "can_stun_deku",
+            "Deku Tree GQ GS Basement Back Room": "
+                is_adult or (Sticks or Kokiri_Sword or has_explosives or can_use(Dins_Fire) or
+                Slingshot or Boomerang)"
+        },
+        "exits": {
+            "Deku Tree Basement Ledge": "is_child",
+            "Deku Tree Basement Like Like Room": "True"
+        }
+    }, 
+    {
+        "region_name": "Deku Tree Basement Ledge",
+        "dungeon": "Deku Tree",
+        "locations": {
+            "Deku Tree GQ Deku Basement Scrub": "can_stun_deku",
+            "Deku Tree GQ GS Basement Ceiling": "can_use(Boomerang) or can_use(Hookshot)"
+        },
+        "exits" : {
+            "Deku Tree Basement Back Room": "is_child",
+            "Deku Tree Lobby": "True",
+            "Deku Tree Near Boss": "
+                deku_tree_shortcuts
+                or here(has_fire_source_with_torch or (logic_deku_b1_webs_with_bow and can_use(Bow)))"
+        }
+    },
+    {
+        "region_name": "Deku Tree Near Boss",
+        "dungeon": "Deku Tree",
+        "locations": {
+            "Deku Tree GQ GS Near Boss": "can_use(Boomerang) or can_use(Hookshot)"
+        },
+        "exits" : {
+            "Deku Tree Basement Ledge": "True",
+            "Deku Tree Boss Door": "True"
+        }
+    }
+]

@@ -16,6 +16,7 @@ typedef struct {
     char name[11];
     uint8_t silver_rupee_puzzles_vanilla[4];
     uint8_t silver_rupee_puzzles_mq[4];
+    uint8_t silver_rupee_puzzles_gq[4];
 } dungeon_entry_t;
 
 extern int dungeon_count;

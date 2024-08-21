@@ -1,5 +1,6 @@
 from __future__ import annotations
 from collections.abc import Iterator
+from enum import IntEnum
 from typing import TYPE_CHECKING, Optional, Any
 
 if TYPE_CHECKING:
@@ -7,6 +8,12 @@ if TYPE_CHECKING:
     from Item import Item
     from Region import Region
     from World import World
+
+
+class DungeonType(IntEnum):
+    VANILLA = 0
+    MQ = 1
+    GQ = 2
 
 
 class Dungeon:

@@ -1,0 +1,32 @@
+[
+    {
+        "region_name": "Forest Temple Lobby",
+        "dungeon": "Forest Temple",
+        "locations": {
+            "Forest Temple GQ First Room Chest": "True",
+            "Forest Temple GQ First Stalfos Chest": "True",
+            "Forest Temple GQ Raised Island Courtyard Lower Chest": "True",
+            "Forest Temple GQ Raised Island Courtyard Upper Chest": "True",
+            "Forest Temple GQ Well Chest": "True",
+            "Forest Temple GQ Gibdo Chest": "True",
+            "Forest Temple GQ Block Push Room Chest": "True",
+            "Forest Temple Boss Key Chest": "True",
+            "Forest Temple GQ Room Map Chest": "True",
+            "Forest Temple GQ Iron Boots Chest": "True",
+            "Forest Temple GQ Room Compass Chest": "True",
+            "Forest Temple GQ Falling Ceiling Room Chest": "True",
+            "Forest Temple GQ Basement Chest": "True",
+            "Forest Temple GQ GS Room 7 1": "True",
+            "Forest Temple GQ GS Level Island Courtyard": "True",
+            "Forest Temple GQ GS Well": "True",
+            "Forest Temple GQ GS Block Push Room": "True",
+            "Forest Temple GQ GS Bubble Pit": "True",
+            "Forest Temple GQ GS Falling Ceiling Room": "True",
+            "Forest Temple GQ GS Basement": "True",
+            "Forest Temple GQ GS Song of Time Block": "True"
+        },
+        "exits": {
+            "Forest Temple Boss Door": "True"
+        }
+    }
+]

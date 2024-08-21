@@ -3,6 +3,7 @@
 #include "z64.h"
 #include "item_draw_table.h"
 #include "sys_matrix.h"
+#include "gq.h"
 
 typedef Gfx* (*append_setup_dl_fn)(Gfx* gfx, uint32_t dl_index);
 typedef void (*append_setup_dl_26_to_opa_fn)(z64_gfx_t* gfx);
@@ -56,6 +57,11 @@ void draw_gi_compass(z64_game_t* game, uint32_t draw_id) {
 
 void draw_gi_various_opa0(z64_game_t* game, uint32_t draw_id) {
     z64_gfx_t* gfx = game->common.gfx;
+
+    // Gold Quest Ultrashot
+    if (draw_id == 0x2D) {
+        set_ultrashot_color(gfx);
+    }
 
     append_setup_dl_25_to_opa(gfx);
     gSPMatrix(gfx->poly_opa.p++, append_sys_matrix(gfx), G_MTX_MODELVIEW | G_MTX_LOAD | G_MTX_NOPUSH);

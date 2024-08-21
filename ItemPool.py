@@ -1,10 +1,12 @@
+# TODO.GQ
 from __future__ import annotations
 import random
-from collections import Counter
+from collections import Counter, OrderedDict
 from collections.abc import Sequence
 from decimal import Decimal, ROUND_UP
 from typing import TYPE_CHECKING, Optional
 
+from Dungeon import DungeonType
 from Item import Item, ItemInfo, ItemFactory
 from Location import DisableType
 
@@ -110,6 +112,7 @@ ludicrous_items_extended: list[str] = [
     'Ocarina',
     'Kokiri Sword',
     'Boss Key (Ganons Castle)',
+    'Boss Key (Dodongos Cavern)',
     'Boss Key (Forest Temple)',
     'Boss Key (Fire Temple)',
     'Boss Key (Water Temple)',
@@ -281,16 +284,19 @@ min_shop_items: list[str] = (
     ['Buy Fish']
 )
 
-deku_scrubs_items: dict[str, str | list[tuple[str, int]]] = {
-    'Buy Deku Shield':     'Deku Shield',
+deku_scrubs_items = OrderedDict[str, str | list[tuple[str, int]]]({
     'Buy Deku Nut (5)':    'Deku Nuts (5)',
     'Buy Deku Stick (1)':  'Deku Stick (1)',
+    'Buy Piece of Heart':  'Recovery Heart',
+    'Buy Deku Seeds (30)': [('Arrows (30)', 3), ('Deku Seeds (30)', 1)],
+    'Buy Deku Shield':     'Deku Shield',
     'Buy Bombs (5) for 35 Rupees':  'Bombs (5)',
+    'Buy Arrows (30)':     [('Arrows (30)', 3), ('Deku Seeds (30)', 1)],
     'Buy Red Potion for 30 Rupees': 'Recovery Heart',
     'Buy Green Potion':    'Rupees (5)',
-    'Buy Arrows (30)':     [('Arrows (30)', 3), ('Deku Seeds (30)', 1)],
-    'Buy Deku Seeds (30)': [('Arrows (30)', 3), ('Deku Seeds (30)', 1)],
-}
+    # Added scrubs items
+    'Buy Wallet':          'Rupees (5)',
+})
 
 trade_items: tuple[str, ...] = (
     "Pocket Egg",
@@ -898,7 +904,7 @@ def get_pool_core(world: World) -> tuple[list[str], dict[str, Item]]:
         # this is because vanilla expects the dungeon major item to be
         # locked behind the keys, which is not always true in rando.
         # We can resolve this by starting with some extra keys
-        if world.dungeon_mq['Spirit Temple']:
+        if world.dungeon_mq['Spirit Temple'] == DungeonType.MQ:
             # Yes somehow you need 3 keys. This dungeon is bonkers
             world.state.collect(ItemFactory('Small Key (Spirit Temple)', world))
             world.state.collect(ItemFactory('Small Key (Spirit Temple)', world))
@@ -909,7 +915,7 @@ def get_pool_core(world: World) -> tuple[list[str], dict[str, Item]]:
             world.state.collect(ItemFactory('Small Key (Shadow Temple)', world))
 
     if (not world.keysanity or (world.empty_dungeons['Fire Temple'].empty and world.settings.shuffle_smallkeys != 'remove'))\
-        and not world.dungeon_mq['Fire Temple']:
+        and not world.dungeon_mq['Fire Temple'] == DungeonType.VANILLA:
         world.state.collect(ItemFactory('Small Key (Fire Temple)', world))
 
     if world.settings.shuffle_ganon_bosskey == 'on_lacs':

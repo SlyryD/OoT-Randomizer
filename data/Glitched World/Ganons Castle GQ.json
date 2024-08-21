@@ -1,0 +1,51 @@
+[
+    {
+        "region_name": "Ganons Castle Lobby",
+        "dungeon": "Ganons Castle",
+        "locations": {
+            "Ganons Castle GQ Room 2 1 Chest": "True",
+            "Ganons Castle GQ Room 2 2 Chest": "True",
+            "Ganons Castle GQ Room 9 1 Chest": "True",
+            "Ganons Castle GQ Room 12 1 Chest": "True",
+            "Ganons Castle GQ Room 14 1 Chest": "True",
+            "Ganons Castle GQ Room 16 1 Chest": "True",
+            "Ganons Castle GQ Room 18 1 Chest": "True",
+            "Ganons Castle GQ Room 18 2 Chest": "True",
+            "Ganons Castle GQ Deku Scrub Room 16 1": "True",
+            "Ganons Castle GQ Deku Scrub Room 16 2": "True",
+            "Ganons Castle GQ Deku Scrub Room 16 3": "True",
+            "Ganons Castle GQ Deku Scrub Room 16 4": "True",
+            "Ganons Castle GQ GS Room 0 1": "True",
+            "Ganons Castle GQ GS Room 2 1": "True",
+            "Ganons Castle GQ GS Room 6 1": "True",
+            "Ganons Castle GQ GS Room 8 1": "True",
+            "Ganons Castle GQ GS Room 12 1": "True",
+            "Ganons Castle GQ GS Room 14 1": "True",
+            "Ganons Castle GQ GS Room 17 1": "True"
+        },
+        "exits": {
+            "Castle Grounds From Ganons Castle": "True",
+            "Ganons Tower": "True"
+        }
+    },
+    {
+        "region_name": "Ganons Tower",
+        "dungeon": "Ganons Castle",
+        "locations": {
+            "Ganons Tower GQ Room 0 1 Chest": "True",
+            "Ganons Tower GQ Room 2 2 Chest": "True",
+            "Ganons Tower GQ GS Room 0 1": "True",
+            "Ganons Tower GQ GS Room 0 2": "True",
+            "Ganons Tower GQ GS Room 2 3": "True",
+            "Ganons Tower GQ GS Room 4 4": "True",
+            "Ganons Tower GQ GS Room 6 5": "True",
+            "Ganons Tower GQ GS Room 6 6": "True",
+            "Ganons Tower GQ GS Room 6 7": "True",
+            "Ganons Tower GQ GS Room 6 8": "True",
+            "Ganons Tower GQ GS Room 7 9": "True"
+        },
+        "exits": {
+            "Ganondorf Boss Room": "Boss_Key_Ganons_Castle"
+        }
+    }
+]

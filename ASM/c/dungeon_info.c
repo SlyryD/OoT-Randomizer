@@ -1,3 +1,5 @@
+// TODO: GQ
+
 #include <stdbool.h>
 #include "dungeon_info.h"
 #include "gfx.h"
@@ -7,6 +9,25 @@
 #include "dpad.h"
 #include "item_effects.h"
 #include "save.h"
+
+dungeon_entry_t gq_dungeons[] = {
+    {  0, 0, 0, 0, 1, 0xFF, "Deku"    },
+    {  1, 0, 1, 0, 1, 0xFF, "Dodongo" }, // DC has a boss key
+    {  2, 0, 0, 0, 1, 0xFF, "Jabu"    },
+
+    {  3, 1, 1, 0, 1, 0xFF, "Forest"  },
+    {  4, 1, 1, 0, 1, 0xFF, "Fire"    },
+    {  5, 1, 1, 0, 1, 0xFF, "Water"   },
+    {  7, 1, 1, 0, 1, 0xFF, "Shadow"  },
+    {  6, 1, 1, 0, 1, 0xFF, "Spirit"  },
+
+    {  8, 1, 0, 0, 1, 0xFF, "BotW"    },
+    {  9, 0, 0, 0, 1, 0xFF, "Ice"     },
+    { 10, 0, 0, 0, 1, 0xFF, "Tower"   },
+    { 12, 1, 0, 1, 0, 0x00, "Hideout" },
+    { 11, 1, 0, 0, 0, 0x00, "GTG"     },
+    { 13, 1, 1, 0, 0, 0x7F, "Ganon"   },
+};
 
 int dungeon_count = 13;
 
@@ -422,7 +443,7 @@ void draw_dungeon_info(z64_disp_buf_t* db) {
                         !z64_file.dungeon_items[d->index].map) {
                     continue;
                 }
-                char* str = CFG_DUNGEON_IS_MQ[d->index] ? "MQ" : "Normal";
+                char* str = CFG_DUNGEON_IS_MQ[d->index] == 2 ? "GQ" : CFG_DUNGEON_IS_MQ[d->index] == 1 ? "MQ" : "Normal";
                 int top = start_top + ((icon_size + padding) * i) + 1;
                 text_print_size(db, str, left, top, font_width, font_height);
             }
@@ -901,7 +922,7 @@ void draw_dungeon_info(z64_disp_buf_t* db) {
                         !z64_file.dungeon_items[d->index].map) {
                     continue;
                 }
-                char* str = CFG_DUNGEON_IS_MQ[d->index] ? "MQ" : "Normal";
+                char* str = CFG_DUNGEON_IS_MQ[d->index] == 2 ? "GQ" : CFG_DUNGEON_IS_MQ[d->index] == 1 ? "MQ" : "Normal";
                 int top = start_top + ((icon_size + padding) * i) + 1;
                 text_print(db, str, left, top);
             }

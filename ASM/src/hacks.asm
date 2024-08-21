@@ -3796,6 +3796,110 @@ DemoEffect_DrawJewel_AfterHook:
 .orga 0xDB9E14
     jal     rand_seed_truth_spinner
 
+;===================================================================================================
+; Gold Quest hacks
+;===================================================================================================
+
+; Set boot physics
+; Replace calls to z64_LinkSetBootData with set_boot_data when setting boots physics
+.orga 0xAEF79C ; z_player_lib
+    jal     set_boot_data
+.orga 0xAF6B6C ; z_room
+    jal     set_boot_data
+.orga 0xBD8438 ; z_player
+    jal     set_boot_data
+.orga 0xBD8B70 ; z_player
+    jal     set_boot_data
+.orga 0xBD8F84 ; z_player
+    jal     set_boot_data
+
+; Set back walk speed
+; Replace call to z64_Math_AsymStepToF with set_back_walk_speed when setting back walk speed
+.orga 0xBDD080 ; z_player
+    jal     set_back_walk_speed
+
+; Draw hookshot reticle
+.orga 0xAF1E28 ; z_player_lib
+    jal     draw_hookshot_reticle
+
+; Set hookshot reticle texture
+.orga 0xF86000 + 0x2CB48 + 0x10 ; object_link_boy file start + dlist offset + gDPSetTextureImage offset
+.word   0xDE000000, 0x09000000 ; jump to the custom dlist at segment 09
+
+; Set hookshot timer (length)
+.orga 0xCAD3B0 ; z_arms_hook
+    sw      a1, 0x0018(sp) ; z64_ArmsHookShoot pointer
+    sw      a0, 0x0020(sp) ; actor pointer
+    jal     get_hookshot_length ; put hookshot length in v0
+    nop
+    lw      a0, 0x0020(sp) ; actor pointer
+    lw      a1, 0x0018(sp) ; z64_ArmsHookShoot pointer
+
+; Draw ultrashot icon on C buttons
+.orga 0xAEBD6C ; z_parameter
+    jal     draw_button_item_icon
+.orga 0xAEC0E4 ; z_parameter
+    jal     draw_button_item_icon
+.orga 0xAEC1A8 ; z_parameter
+    jal     draw_button_item_icon
+.orga 0xAEC26C ; z_parameter
+    jal     draw_button_item_icon
+
+; Draw ultrashot icon during equip
+; TODO.GQ: Clean up this mess
+.orga 0xAEC788 ; z_parameter
+    addiu   sp, sp, -0x30
+    sw      ra, 0x002C(sp)
+    sw      a3, 0x0028(sp)
+    sw      a2, 0x0024(sp)
+    sw      a1, 0x0020(sp)
+    sw      a0, 0x001C(sp)
+    or      a0, r0, s4      ; gfx
+    lhu     t7, 0x024E(a2)  ; (pauseCtx->equipTargetItem)
+    sll     t5, t7, 2
+    lui     t6, 0x8010
+    addu    t6, t6, t5
+    lw      a1, 0x8D2C(t6)  ; texture (gItemIcons[pauseCtx->equipTargetItem])
+    addiu   a2, r0, 0x20    ; width
+    addiu   a3, r0, 0x20    ; height
+    jal     draw_item_icon_overlay ; replace gDPLoadTextureBlock
+    nop
+    lw      a0, 0x001C(sp)
+    lw      a1, 0x0020(sp)
+    lw      a2, 0x0024(sp)
+    lw      a3, 0x0028(sp)
+    lw      ra, 0x002C(sp)
+    addiu   sp, sp, 0x30
+    b       @draw_equip_item_icon_end
+    nop
+.orga 0xAEC85C ; z_parameter
+@draw_equip_item_icon_end:
+; end of original gDPLoadTextureBlock
+
+; Draw ultrashot name in item menu
+; Overwrite KaleidoScope_QuadTextureIA4 with draw_menu_item_name call and return
+.orga 0xBBC6A0 ; z_kaleido_scope_PAL
+    sw      ra, 0x0014(sp) ; parameters are identical so only need to save return address
+    jal     draw_menu_item_name
+    nop
+    lw      ra, 0x0014(sp)
+    jr      ra
+    nop
+
+; Draw ultrashot icon in item menu
+; Overwrite KaleidoScope_DrawQuadTextureRGBA32 with draw_menu_item_icon call and return
+.orga 0xBBCC08 ; z_kaleido_scope_PAL
+    sw      ra, 0x0014(sp) ; parameters are identical so only need to save return address
+    jal     draw_menu_item_icon
+    nop
+    lw      ra, 0x0014(sp)
+    jr      ra
+    nop
+
+; Set ultrashot color
+.orga 0x15BB000 + 0x1240 + 0xC0 ; object_gi_hookshot file start + dlist offset + gsDPSetPrimColor offset
+.word   0xDE000000, 0x09000000 ; jump to the custom dlist at segment 09
+
 ;==================================================================================================
 ; Save current mask on scene change
 ;==================================================================================================
